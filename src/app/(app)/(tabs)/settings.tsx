@@ -1,6 +1,8 @@
+import { useAuth } from "@/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import { ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { Alert, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import {
     heightPercentageToDP as hp,
     widthPercentageToDP as wp,
@@ -53,6 +55,27 @@ function SettingRow({
 
 export default function Settings() {
     const router = useRouter();
+    const { logout } = useAuth();
+
+    const handleLogout = () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+        Alert.alert(
+            "Sign Out",
+            "Are you sure you want to log out of Apex Trade?",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Log Out",
+                    style: "destructive",
+                    onPress: async () => {
+                        await logout();
+                        // RootLayoutNav handles the automatic redirect to login
+                    },
+                },
+            ]
+        );
+    };
 
     return (
         <View className="flex-1 bg-background">
@@ -125,7 +148,7 @@ export default function Settings() {
                     />
                     <SettingRow
                         icon="information-circle-outline"
-                        title="About Edgeva"
+                        title="About Apex Trade"
                         subtitle="Version 1.0.0"
                         onPress={() => router.push("/(app)/settings/about")}
                         isLast
@@ -134,6 +157,7 @@ export default function Settings() {
 
                 {/* Logout */}
                 <TouchableOpacity
+                    onPress={handleLogout}
                     activeOpacity={0.8}
                     className="mt-7 items-center rounded-2xl border border-danger/20 bg-danger/10 py-4"
                 >

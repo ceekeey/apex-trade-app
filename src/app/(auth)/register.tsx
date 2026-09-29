@@ -14,7 +14,7 @@ import {
     View,
 } from "react-native";
 import Toast from "react-native-toast-message";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "@/context/AuthContext";
 
 export default function Register() {
     const router = useRouter();

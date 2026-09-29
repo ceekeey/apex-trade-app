@@ -1,3 +1,4 @@
+import { useAuth } from "@/context/AuthContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -58,6 +59,27 @@ export default function Onboarding() {
     const { width, height } = useWindowDimensions();
     const router = useRouter();
     const insets = useSafeAreaInsets();
+
+    // Inside Onboarding component:
+    const { token, isLoading } = useAuth();
+
+    useEffect(() => {
+        const checkInitialRoute = async () => {
+            if (isLoading) return;
+
+            if (token) {
+                router.replace("/(app)/(tabs)");
+                return;
+            }
+
+            const hasCompleted = await AsyncStorage.getItem("hasCompletedOnboarding");
+            if (hasCompleted === "true") {
+                router.replace("/(auth)/login");
+            }
+        };
+
+        checkInitialRoute();
+    }, [token, isLoading]);
 
     const [activeIndex, setActiveIndex] = useState(0);
     const flatRef = useRef<FlatList<(typeof onboardingData)[0]> | null>(null);

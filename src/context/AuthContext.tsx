@@ -2,7 +2,7 @@ import * as Burnt from "burnt";
 import * as SecureStore from "expo-secure-store";
 import React, { createContext, useContext, useEffect, useState } from "react";
 
-const SERVER_URI = "https://apextrade-api-9i8k.onrender.com/api";
+const SERVER_URI = "https://jornal.rgmrabagardama.com.ng/api";
 
 interface User {
     id: string;

@@ -29,7 +29,7 @@ export default function AboutScreen() {
                         <Ionicons name="arrow-back" size={20} color="#F8FAFC" />
                     </TouchableOpacity>
                     <View className="ml-3">
-                        <Text className="text-2xl font-bold text-text-primary">About Edgeva</Text>
+                        <Text className="text-2xl font-bold text-text-primary">About Apex Trade</Text>
                         <Text className="mt-0.5 text-xs text-text-muted">Secure Trading Protocol</Text>
                     </View>
                 </View>
@@ -39,7 +39,7 @@ export default function AboutScreen() {
                     <View className="h-20 w-20 items-center justify-center rounded-2xl bg-primary/10 border border-primary/20 mb-4">
                         <Ionicons name="trending-up" size={36} color="#3B82F6" />
                     </View>
-                    <Text className="text-xl font-extrabold text-text-primary">Trader's Edge</Text>
+                    <Text className="text-xl font-extrabold text-text-primary">Apex Trade</Text>
                     <Text className="mt-1 text-xs text-text-muted tracking-wider uppercase">Version 1.0.0 (Build 142)</Text>
                     <Text className="mt-4 text-center text-xs leading-5 text-text-secondary">
                         Designed for disciplined traders to record execution, analyze setups, and master trading psychology.
@@ -56,7 +56,7 @@ export default function AboutScreen() {
                 {/* Footer copyright */}
                 <View className="mt-8 items-center">
                     <Text className="text-[10px] font-semibold uppercase tracking-widest text-text-disabled">
-                        © 2026 Trader's Edge Inc. All rights reserved.
+                        © 2026 Apex Trade Inc. All rights reserved.
                     </Text>
                 </View>
             </ScrollView>

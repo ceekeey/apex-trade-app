@@ -19,9 +19,9 @@ import {
 } from "react-native";
 import { widthPercentageToDP as wp } from "react-native-responsive-screen";
 import Toast from "react-native-toast-message";
-import { useAuth } from "../../../context/AuthContext";
+import { useAuth } from "@/context/AuthContext";
 
-const SERVER_URI = "https://apextrade-api-9i8k.onrender.com/api";
+const SERVER_URI = "https://jornal.rgmrabagardama.com.ng/api";
 
 type PlaybookItem = {
     id: string;

@@ -1,3 +1,4 @@
+import { useAuth } from "@/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
@@ -7,8 +8,8 @@ import {
     widthPercentageToDP as wp,
 } from "react-native-responsive-screen";
 import Toast from "react-native-toast-message";
-import { useAuth } from "../../../context/AuthContext";
-const SERVER_URI = "https://apextrade-api-9i8k.onrender.com/api";
+
+const SERVER_URI = "https://jornal.rgmrabagardama.com.ng/api";
 
 type DayStatus = "WIN" | "LOSS" | "MIXED" | "OPEN" | "EMPTY";
 
@@ -35,9 +36,9 @@ const formatDateKey = (date: Date): string => {
 
 const formatCurrency = (value: number): string => {
     const abs = Math.abs(value);
-    if (value > 0) return `+$${abs}`;
-    if (value < 0) return `-$${abs}`;
-    return "$0";
+    if (value > 0) return `+$${abs.toFixed(2)}`;
+    if (value < 0) return `-$${abs.toFixed(2)}`;
+    return "$0.00";
 };
 
 export default function Trades() {
@@ -49,7 +50,7 @@ export default function Trades() {
     const [currentYear, setCurrentYear] = useState(today.getFullYear());
 
     const [journalData, setJournalData] = useState<Record<string, JournalDay>>({});
-    const [monthStats, setMonthStats] = useState({ totalTrades: 0, totalPnl: 0, winningDays: 0 });
+    const [rawJournals, setRawJournals] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
     // Fetch Journal Entries from Backend API
@@ -57,7 +58,6 @@ export default function Trades() {
         const fetchJournals = async () => {
             try {
                 setIsLoading(true);
-                // Updated endpoint from /journal/all to /jornal/all
                 const response = await fetch(`${SERVER_URI}/jornal/all`, {
                     headers: {
                         Authorization: `Bearer ${token}`,
@@ -65,10 +65,10 @@ export default function Trades() {
                 });
                 const result = await response.json();
 
-                if (result.success) {
+                if (result.success && Array.isArray(result.data)) {
+                    setRawJournals(result.data);
                     const entriesMap: Record<string, JournalDay> = {};
 
-                    // Map backend response data array into calendar records
                     result.data.forEach((item: any) => {
                         const itemDate = new Date(item.date);
                         const key = formatDateKey(itemDate);
@@ -80,6 +80,10 @@ export default function Trades() {
                         if (entriesMap[key]) {
                             entriesMap[key].pnl = (entriesMap[key].pnl || 0) + item.pnl;
                             entriesMap[key].trades = (entriesMap[key].trades || 0) + 1;
+                            // Re-evaluate day status if mixed trades occurred on the same day
+                            if (entriesMap[key].pnl! > 0) entriesMap[key].status = "WIN";
+                            else if (entriesMap[key].pnl! < 0) entriesMap[key].status = "LOSS";
+                            else entriesMap[key].status = "MIXED";
                         } else {
                             entriesMap[key] = {
                                 date: itemDate.getDate(),
@@ -91,14 +95,6 @@ export default function Trades() {
                     });
 
                     setJournalData(entriesMap);
-
-                    if (result.stats) {
-                        setMonthStats({
-                            totalTrades: result.stats.totalTrades || 0,
-                            totalPnl: result.stats.totalPnl || 0,
-                            winningDays: result.stats.winningTrades || 0,
-                        });
-                    }
                 } else {
                     Toast.show({
                         type: "error",
@@ -117,8 +113,34 @@ export default function Trades() {
             }
         };
 
-        fetchJournals();
-    }, [currentMonth, currentYear]);
+        if (token) {
+            fetchJournals();
+        }
+    }, [token]);
+
+    // Compute stats specifically for the selected month/year
+    const currentMonthStats = useMemo(() => {
+        let totalTrades = 0;
+        let totalPnl = 0;
+        let winningDays = 0;
+
+        Object.entries(journalData).forEach(([key, dayData]) => {
+            const [yearStr, monthStr] = key.split("-");
+            const itemYear = parseInt(yearStr, 10);
+            const itemMonth = parseInt(monthStr, 10) - 1;
+
+            if (itemYear === currentYear && itemMonth === currentMonth) {
+                totalTrades += dayData.trades || 0;
+                totalPnl += dayData.pnl || 0;
+                if ((dayData.pnl || 0) > 0) {
+                    winningDays += 1;
+                }
+            }
+        });
+
+        return { totalTrades, totalPnl, winningDays };
+    }, [journalData, currentMonth, currentYear]);
+
     const daysInMonth = useMemo(
         () => new Date(currentYear, currentMonth + 1, 0).getDate(),
         [currentMonth, currentYear]
@@ -172,8 +194,8 @@ export default function Trades() {
     const openJournal = (day: number) => {
         const date = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
         router.push({
-            pathname: "/(app)/dailyjornal/[date]",
-            params: { date },
+            pathname: "/(app)/dailyjornal/[id]",
+            params: { id: date },
         });
     };
 
@@ -250,24 +272,23 @@ export default function Trades() {
                             <View className="flex-1">
                                 <Text className="text-[11px] text-text-muted">Trades</Text>
                                 <Text className="mt-1 text-lg font-bold text-text-primary">
-                                    {monthStats.totalTrades}
+                                    {currentMonthStats.totalTrades}
                                 </Text>
                             </View>
 
                             <View className="flex-1 border-l border-border pl-4">
                                 <Text className="text-[11px] text-text-muted">Winning days</Text>
                                 <Text className="mt-1 text-lg font-bold text-success">
-                                    {monthStats.winningDays}
+                                    {currentMonthStats.winningDays}
                                 </Text>
                             </View>
 
                             <View className="flex-1 border-l border-border pl-4">
                                 <Text className="text-[11px] text-text-muted">P&amp;L</Text>
                                 <Text
-                                    className={`mt-1 text-lg font-bold ${monthStats.totalPnl >= 0 ? "text-success" : "text-danger"
-                                        }`}
+                                    className={`mt-1 text-lg font-bold ${currentMonthStats.totalPnl >= 0 ? "text-success" : "text-danger"}`}
                                 >
-                                    {formatCurrency(monthStats.totalPnl)}
+                                    {formatCurrency(currentMonthStats.totalPnl)}
                                 </Text>
                             </View>
                         </View>

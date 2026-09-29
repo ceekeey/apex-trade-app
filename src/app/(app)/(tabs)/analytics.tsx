@@ -1,9 +1,20 @@
 import { Ionicons } from "@expo/vector-icons";
-import { ScrollView, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import {
     heightPercentageToDP as hp,
     widthPercentageToDP as wp,
 } from "react-native-responsive-screen";
+import { useAuth } from "@/context/AuthContext"; // Adjust path to match your AuthContext location
+
+const SERVER_URI = "https://jornal.rgmrabagardama.com.ng/api";
+
+interface JournalEntry {
+    _id: string;
+    pnl: number;
+    result?: string;
+    // Add other fields if returned by your journal API
+}
 
 function Metric({
     label,
@@ -30,6 +41,109 @@ function Metric({
 }
 
 export default function Analytics() {
+    const { token } = useAuth();
+    const [isLoading, setIsLoading] = useState(true);
+    const [journals, setJournals] = useState<JournalEntry[]>([]);
+
+    // Analytics state variables
+    const [winRate, setWinRate] = useState("0%");
+    const [profitFactor, setProfitFactor] = useState("0.00");
+    const [totalTrades, setTotalTrades] = useState("0");
+    const [winningCount, setWinningCount] = useState(0);
+    const [losingCount, setLosingCount] = useState(0);
+    const [bestTrade, setBestTrade] = useState("0.0R");
+
+    useEffect(() => {
+        const fetchAnalyticsData = async () => {
+            if (!token) return;
+
+            try {
+                setIsLoading(true);
+                // Adjust endpoint if your backend has a dedicated analytics route, 
+                // otherwise fetching all journals to compute analytics locally:
+                const response = await fetch(`${SERVER_URI}/jornal/all`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                });
+
+                const data = await response.json();
+                console.log("Analytics Journals Response:", data);
+
+                // Handle array response or object wrapping an array (e.g. data.journals or data.success)
+                const items: JournalEntry[] = Array.isArray(data)
+                    ? data
+                    : data.journals || data.data || [];
+
+                setJournals(items);
+                computeMetrics(items);
+            } catch (error) {
+                console.log("Error fetching analytics data:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchAnalyticsData();
+    }, [token]);
+
+    const computeMetrics = (items: JournalEntry[]) => {
+        const total = items.length;
+        if (total === 0) {
+            setWinRate("0%");
+            setProfitFactor("0.00");
+            setTotalTrades("0");
+            setWinningCount(0);
+            setLosingCount(0);
+            setBestTrade("0.0R");
+            return;
+        }
+
+        let wins = 0;
+        let losses = 0;
+        let grossProfit = 0;
+        let grossLoss = 0;
+        let maxPnl = -Infinity;
+
+        items.forEach((item) => {
+            const pnl = item.pnl || 0;
+            if (pnl > 0) {
+                wins++;
+                grossProfit += pnl;
+            } else if (pnl < 0) {
+                losses++;
+                grossLoss += Math.abs(pnl);
+            }
+
+            if (pnl > maxPnl) {
+                maxPnl = pnl;
+            }
+        });
+
+        // 1. Win Rate Calculation
+        const calculatedWinRate = Math.round((wins / total) * 100);
+        setWinRate(`${calculatedWinRate}%`);
+
+        // 2. Profit Factor Calculation (Gross Profit / Gross Loss)
+        const pFactor = grossLoss === 0 ? (grossProfit > 0 ? grossProfit.toFixed(2) : "0.00") : (grossProfit / grossLoss).toFixed(2);
+        setProfitFactor(pFactor);
+
+        // 3. Totals & Breakdown
+        setTotalTrades(total.toString());
+        setWinningCount(wins);
+        setLosingCount(losses);
+        setBestTrade(maxPnl === -Infinity ? "0.0R" : `+${maxPnl.toFixed(1)}R`);
+    };
+
+    if (isLoading) {
+        return (
+            <View className="flex-1 items-center justify-center bg-background">
+                <ActivityIndicator size="large" color="#2563EB" />
+                <Text className="mt-3 text-xs text-text-muted">Loading analytics...</Text>
+            </View>
+        );
+    }
+
     return (
         <View className="flex-1 bg-background">
             <ScrollView
@@ -51,13 +165,13 @@ export default function Analytics() {
                 <View className="mt-6 flex-row gap-3">
                     <Metric
                         label="Win Rate"
-                        value="57%"
+                        value={winRate}
                         icon="trophy-outline"
                     />
 
                     <Metric
                         label="Profit Factor"
-                        value="1.84"
+                        value={profitFactor}
                         icon="trending-up-outline"
                     />
                 </View>
@@ -65,13 +179,13 @@ export default function Analytics() {
                 <View className="mt-3 flex-row gap-3">
                     <Metric
                         label="Avg. R"
-                        value="+1.2R"
+                        value="+1.2R" // You can map this dynamically if your backend tracks R-multiples
                         icon="analytics-outline"
                     />
 
                     <Metric
                         label="Total Trades"
-                        value="42"
+                        value={totalTrades}
                         icon="swap-horizontal-outline"
                     />
                 </View>
@@ -86,7 +200,7 @@ export default function Analytics() {
                     <View className="mt-6 items-center justify-center">
                         <View className="h-36 w-36 items-center justify-center rounded-full border-8 border-primary">
                             <Text className="text-3xl font-bold text-text-primary">
-                                57%
+                                {winRate}
                             </Text>
 
                             <Text className="text-xs text-text-muted">
@@ -110,7 +224,7 @@ export default function Analytics() {
                             </Text>
 
                             <Text className="font-bold text-success">
-                                24
+                                {winningCount}
                             </Text>
                         </View>
 
@@ -120,7 +234,7 @@ export default function Analytics() {
                             </Text>
 
                             <Text className="font-bold text-danger">
-                                18
+                                {losingCount}
                             </Text>
                         </View>
 
@@ -130,7 +244,7 @@ export default function Analytics() {
                             </Text>
 
                             <Text className="font-bold text-text-primary">
-                                +4.2R
+                                {bestTrade}
                             </Text>
                         </View>
                     </View>

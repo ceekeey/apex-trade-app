@@ -14,9 +14,9 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
-import { useAuth } from "../../../context/AuthContext";
+import { useAuth } from "@/context/AuthContext";
 
-const SERVER_URI = "https://apextrade-api-9i8k.onrender.com/api";
+const SERVER_URI = "https://jornal.rgmrabagardama.com.ng/api";
 
 
 const PAIRS = [
