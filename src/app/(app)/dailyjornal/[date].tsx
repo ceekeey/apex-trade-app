@@ -1,13 +1,14 @@
+import { useAuth } from "@/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import {
+    ActivityIndicator,
     ScrollView,
     Text,
     TouchableOpacity,
     View,
 } from "react-native";
-import { useAuth } from "@/context/AuthContext";
 
 const SERVER_URI = "https://jornal.rgmrabagardama.com.ng/api";
 
@@ -16,6 +17,7 @@ export default function DailyJournal() {
     const params = useLocalSearchParams();
     const { token, isLoading: authLoading } = useAuth();
 
+    const [isLoading, setIsLoading] = useState(true);
     const [matchingJournals, setMatchingJournals] = useState<any[]>([]);
     const [dayStats, setDayStats] = useState({ totalTrades: 0, totalPnl: 0 });
 
@@ -23,36 +25,35 @@ export default function DailyJournal() {
     const rawDate = params.id || params.date;
     const dateString = Array.isArray(rawDate) ? rawDate[0] : rawDate;
 
-    const fetchDateTrades = async () => {
-        console.log("=== fetchDateTrades triggered ===");
-        console.log("Token present:", !!token);
-        console.log("Resolved Date parameter:", dateString);
+    const fetchDateTrades = useCallback(async () => {
+        // console.log("=== fetchDateTrades triggered ===");
+        // console.log("Token present:", !!token);
+        // console.log("Resolved Date parameter:", dateString);
 
         if (!token) {
-            console.log("❌ Skipping fetch: No auth token available yet.");
+            // console.log("❌ Skipping fetch: No auth token available yet.");
+            setIsLoading(false);
             return;
         }
 
         if (!dateString) {
-            console.log("❌ Skipping fetch: No date parameter provided in route.");
+            // console.log("❌ Skipping fetch: No date parameter provided in route.");
+            setIsLoading(false);
             return;
         }
 
         try {
+            setIsLoading(true);
             const url = `${SERVER_URI}/jornal/all`;
-            console.log("Fetching from URL:", url);
 
             const journalRes = await fetch(url, {
                 headers: { Authorization: `Bearer ${token}` },
             });
 
-            console.log("Response status:", journalRes.status);
             const journalJson = await journalRes.json();
-            console.log("Response JSON received:", journalJson);
 
             if (journalRes.ok && journalJson.success && Array.isArray(journalJson.data)) {
                 const targetDate = dateString.split("T")[0];
-                console.log("Filtering for target date (YYYY-MM-DD):", targetDate);
 
                 const filtered = journalJson.data.filter((item: any) => {
                     if (!item.date) return false;
@@ -60,7 +61,7 @@ export default function DailyJournal() {
                     return itemDate === targetDate;
                 });
 
-                console.log("Filtered matching journals count:", filtered.length);
+                // console.log("Filtered matching journals count:", filtered.length);
                 setMatchingJournals(filtered);
 
                 let pnlTotal = 0;
@@ -73,25 +74,31 @@ export default function DailyJournal() {
                     totalPnl: pnlTotal,
                 });
             } else {
-                console.log("❌ API response was not successful or data is not an array:", journalJson);
+                // console.log("❌ API response was not successful or data is not an array:", journalJson);
             }
         } catch (error) {
-            console.log("❌ Catch block error loading date data:", error);
+            // console.log("❌ Catch block error loading date data:", error);
+        } finally {
+            setIsLoading(false);
         }
-    };
+    }, [token, dateString]);
 
-    // Trigger when auth loading finishes and token/date are present
-    useEffect(() => {
-        console.log("useEffect fired. authLoading:", authLoading, "token:", !!token, "date:", dateString);
-        if (!authLoading && token && dateString) {
-            fetchDateTrades();
-        }
-    }, [authLoading, token, dateString]);
+    // Trigger when screen receives focus and token/date are ready
+    useFocusEffect(
+        useCallback(() => {
+            // console.log("useFocusEffect fired. authLoading:", authLoading, "token:", !!token, "date:", dateString);
+            if (!authLoading && token && dateString) {
+                fetchDateTrades();
+            } else if (!authLoading) {
+                setIsLoading(false);
+            }
+        }, [authLoading, token, dateString, fetchDateTrades])
+    );
 
     // Handler to navigate to single trade review screen
     const handleSelectTrade = (tradeId: string) => {
         router.push({
-            pathname: "/(app)/trade/[id]", // Adjust path if your single trade route differs
+            pathname: "/(app)/trade/[id]",
             params: { id: tradeId },
         });
     };
@@ -99,10 +106,21 @@ export default function DailyJournal() {
     // Handler to navigate to create/add journal screen passing the date
     const handleAddJournalForDate = () => {
         router.push({
-            pathname: "/(app)/create-journal", // Adjust to your actual create screen route path
+            pathname: "/(app)/create-journal",
             params: { date: dateString },
         });
     };
+
+    if (isLoading || authLoading) {
+        return (
+            <View className="flex-1 items-center justify-center bg-background">
+                <ActivityIndicator size="large" color="#3B82F6" />
+                <Text className="mt-3 text-xs font-semibold text-text-muted">
+                    Loading daily summary...
+                </Text>
+            </View>
+        );
+    }
 
     return (
         <View className="flex-1 bg-background">
@@ -196,7 +214,7 @@ export default function DailyJournal() {
                         <Ionicons name="folder-open-outline" size={32} color="#64748B" />
                         <Text className="mt-2 text-sm font-semibold text-text-secondary">No trades found</Text>
                         <Text className="mt-1 text-center text-xs text-text-muted">
-                            {authLoading ? "Loading session..." : "You haven't logged any trades for this date."}
+                            You haven't logged any trades for this date.
                         </Text>
                     </View>
                 ) : (

@@ -1,17 +1,18 @@
+import { useAuth } from "@/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
+    Alert,
     Animated,
-    Image, // 👈 Added Image import
+    Image,
     Text,
     TouchableOpacity,
     View,
 } from "react-native";
 import { widthPercentageToDP as wp } from "react-native-responsive-screen";
 import Toast from "react-native-toast-message";
-import { useAuth } from "@/context/AuthContext";
 
 const SERVER_URI = "https://jornal.rgmrabagardama.com.ng/api";
 
@@ -25,11 +26,12 @@ const icons: (keyof typeof Ionicons.glyphMap)[] = [
 
 export default function SetupDetails() {
     const router = useRouter();
-    const { id } = useLocalSearchParams();
+    const { id } = useLocalSearchParams<{ id: string }>();
     const { token } = useAuth();
 
     const [setup, setSetup] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isDeleting, setIsDeleting] = useState(false); // Added deletion state
 
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const slideAnim = useRef(new Animated.Value(20)).current;
@@ -69,7 +71,7 @@ export default function SetupDetails() {
         if (id) {
             fetchPlanDetails();
         }
-    }, [id]);
+    }, [id, token]);
 
     // Animate content appearance when loaded
     useEffect(() => {
@@ -88,6 +90,57 @@ export default function SetupDetails() {
             ]).start();
         }
     }, [isLoading]);
+
+    // Delete strategy function
+    const handleDeletePlan = () => {
+        Alert.alert(
+            "Delete Strategy",
+            "Are you sure you want to delete this strategy? This action cannot be undone.",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            setIsDeleting(true);
+                            const response = await fetch(`${SERVER_URI}/plans/delete/${id}`, {
+                                method: "DELETE",
+                                headers: {
+                                    Authorization: `Bearer ${token}`,
+                                    Accept: "application/json",
+                                },
+                            });
+                            const result = await response.json();
+
+                            if (response.ok && result.success) {
+                                Toast.show({
+                                    type: "success",
+                                    text1: "Deleted",
+                                    text2: "Trading plan deleted successfully.",
+                                });
+                                router.back();
+                            } else {
+                                Toast.show({
+                                    type: "error",
+                                    text1: "Delete Failed",
+                                    text2: result.message || "Could not delete strategy.",
+                                });
+                            }
+                        } catch (error) {
+                            Toast.show({
+                                type: "error",
+                                text1: "Network Error",
+                                text2: "Failed to connect to server.",
+                            });
+                        } finally {
+                            setIsDeleting(false);
+                        }
+                    },
+                },
+            ]
+        );
+    };
 
     if (isLoading) {
         return (
@@ -141,11 +194,18 @@ export default function SetupDetails() {
                         <Ionicons name="arrow-back" size={20} color="#FFFFFF" />
                     </TouchableOpacity>
 
+                    {/* Delete Icon Button */}
                     <TouchableOpacity
                         activeOpacity={0.8}
-                        className="h-11 w-11 items-center justify-center rounded-2xl border border-border bg-surface"
+                        onPress={handleDeletePlan}
+                        disabled={isDeleting}
+                        className="h-11 w-11 items-center justify-center rounded-2xl border border-border bg-danger/10"
                     >
-                        <Ionicons name="ellipsis-horizontal" size={20} color="#94A3B8" />
+                        {isDeleting ? (
+                            <ActivityIndicator size="small" color="#DC2626" />
+                        ) : (
+                            <Ionicons name="trash-outline" size={20} color="#DC2626" />
+                        )}
                     </TouchableOpacity>
                 </View>
 
@@ -237,15 +297,6 @@ export default function SetupDetails() {
                     <ChecklistItem text="Risk is defined before entry" />
                     <ChecklistItem text="Trade follows the strategy rules" />
                 </View>
-
-                {/* Action */}
-                <TouchableOpacity
-                    activeOpacity={0.85}
-                    className="mt-6 flex-row items-center justify-center rounded-2xl bg-primary py-4"
-                >
-                    <Ionicons name="create-outline" size={19} color="#FFFFFF" />
-                    <Text className="ml-2 text-sm font-bold text-white">Edit Strategy</Text>
-                </TouchableOpacity>
             </Animated.ScrollView>
         </View>
     );

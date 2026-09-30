@@ -1,8 +1,10 @@
+import { useAuth } from "@/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
+    ActivityIndicator,
     Alert,
     Image,
     KeyboardAvoidingView,
@@ -18,13 +20,35 @@ import {
     widthPercentageToDP as wp,
 } from "react-native-responsive-screen";
 
+const SERVER_URI = "https://jornal.rgmrabagardama.com.ng/api";
+
 export default function ProfileSettings() {
     const router = useRouter();
+    const { user, token } = useAuth();
 
-    const [name, setName] = useState("Alex Trader");
-    const [email, setEmail] = useState("alex@tradersedge.io");
-    const [bio, setBio] = useState("Focused on London Breakouts & XAUUSD setups.");
-    const [avatar, setAvatar] = useState<string | null>(null);
+    // Populate inputs from AuthContext user object on load
+    const [name, setName] = useState(user?.name || "");
+    const [email, setEmail] = useState(user?.email || "");
+    const [bio, setBio] = useState(user?.bio || "");
+
+    // Password state fields
+    const [currentPassword, setCurrentPassword] = useState("");
+    const [newPassword, setNewPassword] = useState("");
+    const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+    const [showNewPassword, setShowNewPassword] = useState(false);
+
+    const [avatar, setAvatar] = useState<string | null>(user?.avatar || null);
+    const [isSaving, setIsSaving] = useState(false);
+
+    // Keep fields synchronized if user object updates
+    useEffect(() => {
+        if (user) {
+            setName(user.name || "");
+            setEmail(user.email || "");
+            setBio(user.bio || "");
+            if (user.avatar) setAvatar(user.avatar);
+        }
+    }, [user]);
 
     const pickImage = async () => {
         const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -45,10 +69,66 @@ export default function ProfileSettings() {
         }
     };
 
-    const handleSave = () => {
-        Alert.alert("Success", "Profile updated successfully.", [
-            { text: "OK", onPress: () => router.back() }
-        ]);
+    const handleSave = async () => {
+        if (!token) {
+            Alert.alert("Authentication Error", "You must be logged in to update your profile.");
+            return;
+        }
+
+        try {
+            setIsSaving(true);
+            const formData = new FormData();
+
+            formData.append("name", name);
+            formData.append("email", email);
+            formData.append("bio", bio);
+
+            // Append passwords only if the user is attempting to change it
+            if (newPassword) {
+                if (!currentPassword) {
+                    Alert.alert("Validation Error", "Please provide your current password to set a new one.");
+                    setIsSaving(false);
+                    return;
+                }
+                formData.append("currentPassword", currentPassword);
+                formData.append("newPassword", newPassword);
+            }
+
+            // Append local image URI if a new picture was chosen from gallery
+            if (avatar && avatar.startsWith("file://")) {
+                const uriParts = avatar.split(".");
+                const fileType = uriParts[uriParts.length - 1];
+
+                // @ts-ignore
+                formData.append("avatar", {
+                    uri: avatar,
+                    name: `profile_avatar.${fileType}`,
+                    type: `image/${fileType}`,
+                });
+            }
+
+            const response = await fetch(`${SERVER_URI}/user/profile`, {
+                method: "PUT",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+                body: formData,
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || data.error || "Failed to update profile settings.");
+            }
+
+            Alert.alert("Success", "Profile updated successfully.", [
+                { text: "OK", onPress: () => router.back() }
+            ]);
+        } catch (error: any) {
+            Alert.alert("Update Failed", error.message || "Something went wrong connecting to the server.");
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     return (
@@ -134,16 +214,61 @@ export default function ProfileSettings() {
                         placeholderTextColor="#64748B"
                         className="mt-2 min-h-[100px] rounded-2xl border border-border bg-surface px-4 py-4 text-sm text-text-primary"
                     />
+
+                    {/* Password Update Section Header */}
+                    <Text className="mt-8 text-sm font-bold text-text-primary">Change Password</Text>
+                    <Text className="mt-0.5 text-xs text-text-muted">Leave blank if you do not want to change your password.</Text>
+
+                    <Text className="mt-4 text-xs font-semibold text-text-secondary">CURRENT PASSWORD</Text>
+                    <View className="mt-2 flex-row items-center rounded-2xl border border-border bg-surface px-4">
+                        <Ionicons name="lock-closed-outline" size={18} color="#64748B" />
+                        <TextInput
+                            value={currentPassword}
+                            onChangeText={setCurrentPassword}
+                            secureTextEntry={!showCurrentPassword}
+                            placeholder="Enter current password"
+                            placeholderTextColor="#64748B"
+                            autoCapitalize="none"
+                            className="ml-3 flex-1 py-4 text-sm text-text-primary"
+                        />
+                        <TouchableOpacity onPress={() => setShowCurrentPassword(!showCurrentPassword)}>
+                            <Ionicons name={showCurrentPassword ? "eye-off-outline" : "eye-outline"} size={18} color="#64748B" />
+                        </TouchableOpacity>
+                    </View>
+
+                    <Text className="mt-5 text-xs font-semibold text-text-secondary">NEW PASSWORD</Text>
+                    <View className="mt-2 flex-row items-center rounded-2xl border border-border bg-surface px-4">
+                        <Ionicons name="key-outline" size={18} color="#64748B" />
+                        <TextInput
+                            value={newPassword}
+                            onChangeText={setNewPassword}
+                            secureTextEntry={!showNewPassword}
+                            placeholder="Enter new password"
+                            placeholderTextColor="#64748B"
+                            autoCapitalize="none"
+                            className="ml-3 flex-1 py-4 text-sm text-text-primary"
+                        />
+                        <TouchableOpacity onPress={() => setShowNewPassword(!showNewPassword)}>
+                            <Ionicons name={showNewPassword ? "eye-off-outline" : "eye-outline"} size={18} color="#64748B" />
+                        </TouchableOpacity>
+                    </View>
                 </View>
 
                 {/* Save Button */}
                 <TouchableOpacity
                     activeOpacity={0.85}
                     onPress={handleSave}
+                    disabled={isSaving}
                     className="mt-8 flex-row items-center justify-center rounded-2xl bg-primary py-4 shadow-lg"
                 >
-                    <Ionicons name="checkmark-circle-outline" size={20} color="#FFFFFF" />
-                    <Text className="ml-2 text-sm font-bold text-white">Save Changes</Text>
+                    {isSaving ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                        <>
+                            <Ionicons name="checkmark-circle-outline" size={20} color="#FFFFFF" />
+                            <Text className="ml-2 text-sm font-bold text-white">Save Changes</Text>
+                        </>
+                    )}
                 </TouchableOpacity>
             </ScrollView>
         </KeyboardAvoidingView>

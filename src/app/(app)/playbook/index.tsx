@@ -1,8 +1,9 @@
+import { useAuth } from "@/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useRouter, useFocusEffect } from "expo-router"; // Added useFocusEffect
+import { useRef, useState, useCallback, useEffect } from "react"; // Added useCallback, removed useEffect if unused elsewhere
 import {
     ActivityIndicator,
     Animated,
@@ -19,7 +20,6 @@ import {
 } from "react-native";
 import { widthPercentageToDP as wp } from "react-native-responsive-screen";
 import Toast from "react-native-toast-message";
-import { useAuth } from "@/context/AuthContext";
 
 const SERVER_URI = "https://jornal.rgmrabagardama.com.ng/api";
 
@@ -47,6 +47,7 @@ export default function Playbook() {
 
     const [plans, setPlans] = useState<PlaybookItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isSubmitting, setIsSubmitting] = useState(false); // Added submission lock state
     const [modalVisible, setModalVisible] = useState(false);
     const [search, setSearch] = useState("");
 
@@ -62,8 +63,8 @@ export default function Playbook() {
     const fetchPlans = async () => {
         try {
             setIsLoading(true);
-            console.log("🚀 [Playbook] Fetching plans from:", `${SERVER_URI}/plans/allplans`);
-            console.log("🔑 [Playbook] Token present:", token ? "Yes" : "No");
+            // console.log("🚀 [Playbook] Fetching plans from:", `${SERVER_URI}/plans/allplans`);
+            // console.log("🔑 [Playbook] Token present:", token ? "Yes" : "No");
 
             const response = await fetch(`${SERVER_URI}/plans/allplans`, {
                 headers: {
@@ -75,7 +76,7 @@ export default function Playbook() {
             const responseText = await response.text();
 
             // 2. Log the first 150 characters to see if it's HTML ("<!DOCTYPE...") or JSON
-            console.log("📥 [Playbook] Raw response preview:", responseText.substring(0, 150));
+            // console.log("📥 [Playbook] Raw response preview:", responseText.substring(0, 150));
 
             // 3. Check if response is HTML or not OK
             if (!response.ok || responseText.trim().startsWith("<")) {
@@ -104,7 +105,7 @@ export default function Playbook() {
                 });
             }
         } catch (error) {
-            console.error("❌ [Playbook] Fetch exception error:", error);
+            // console.error("❌ [Playbook] Fetch exception error:", error);
             Toast.show({
                 type: "error",
                 text1: "Connection Error",
@@ -115,8 +116,15 @@ export default function Playbook() {
         }
     };
 
+    // Refetch plans every time the screen comes into focus
+    useFocusEffect(
+        useCallback(() => {
+            fetchPlans();
+        }, [token])
+    );
+
+    // Keep your FAB animation inside a separate useEffect so it only runs once on mount
     useEffect(() => {
-        fetchPlans();
         Animated.spring(fabScale, {
             toValue: 1,
             friction: 6,
@@ -138,6 +146,7 @@ export default function Playbook() {
     };
 
     const closeModal = () => {
+        if (isSubmitting) return; // Prevent closing while submitting
         setModalVisible(false);
         resetForm();
     };
@@ -191,13 +200,16 @@ export default function Playbook() {
 
     // Send new plan to backend database with Base64 image conversion
     const addPlan = async () => {
+        if (isSubmitting) return; // Prevent duplicate execution attempts
+
         if (!planName.trim()) {
             Toast.show({ type: "error", text1: "Validation Error", text2: "Plan name is required." });
             return;
         }
 
         try {
-            console.log("📤 [Playbook] Creating new plan:", planName);
+            setIsSubmitting(true);
+            // console.log("📤 [Playbook] Creating new plan:", planName);
 
             let imagePayload = undefined;
 
@@ -229,23 +241,25 @@ export default function Playbook() {
                     name: planName.trim(),
                     description: description.trim(),
                     rules: rulesList.length > 0 ? rulesList : ["Follow risk management"],
-                    image: imagePayload, // Passes { data: "...", mimeType: "..." } or undefined
+                    image: imagePayload,
                 }),
             });
 
             const data = await response.json();
-            console.log("📥 [Playbook] Creation response:", JSON.stringify(data, null, 2));
+            // console.log("📥 [Playbook] Creation response:", JSON.stringify(data, null, 2));
 
-            if (data.success) {
+            if (response.ok && data.success) {
                 Toast.show({ type: "success", text1: "Strategy added successfully!" });
                 fetchPlans(); // Refresh list from DB
                 closeModal();
             } else {
-                Toast.show({ type: "error", text1: "Failed to save strategy", text2: data.message });
+                Toast.show({ type: "error", text1: "Failed to save strategy", text2: data.message || "Unknown error occurred" });
             }
         } catch (error) {
-            console.error("❌ [Playbook] Add plan exception error:", error);
+            // console.error("❌ [Playbook] Add plan exception error:", error);
             Toast.show({ type: "error", text1: "Error", text2: "Network request failed." });
+        } finally {
+            setIsSubmitting(false); // Re-enable button whether it succeeds or fails
         }
     };
 
@@ -361,8 +375,8 @@ export default function Playbook() {
                     <View className="max-h-[85%] rounded-t-3xl border-t border-border bg-surface p-6">
                         <View className="flex-row items-center justify-between pb-4">
                             <Text className="text-xl font-bold text-text-primary">New Strategy</Text>
-                            <TouchableOpacity onPress={closeModal}>
-                                <Ionicons name="close" size={24} color="#64748B" />
+                            <TouchableOpacity onPress={closeModal} disabled={isSubmitting}>
+                                <Ionicons name="close" size={24} color={isSubmitting ? "#334155" : "#64748B"} />
                             </TouchableOpacity>
                         </View>
 
@@ -373,6 +387,7 @@ export default function Playbook() {
                                 onChangeText={setPlanName}
                                 placeholder="e.g., Opening Range Breakout"
                                 placeholderTextColor="#64748B"
+                                editable={!isSubmitting}
                                 className="rounded-2xl border border-border bg-background px-4 py-3 text-sm text-text-primary"
                             />
 
@@ -384,6 +399,7 @@ export default function Playbook() {
                                 placeholderTextColor="#64748B"
                                 multiline
                                 numberOfLines={3}
+                                editable={!isSubmitting}
                                 className="rounded-2xl border border-border bg-background px-4 py-3 text-sm text-text-primary"
                                 style={{ textAlignVertical: 'top' }}
                             />
@@ -395,9 +411,14 @@ export default function Playbook() {
                                     onChangeText={setRuleInput}
                                     placeholder="Add rule (e.g., Wait for 5m candle close)"
                                     placeholderTextColor="#64748B"
+                                    editable={!isSubmitting}
                                     className="flex-1 rounded-2xl border border-border bg-background px-4 py-3 text-sm text-text-primary"
                                 />
-                                <TouchableOpacity onPress={addRuleToList} className="ml-2 rounded-2xl bg-primary p-3">
+                                <TouchableOpacity
+                                    onPress={addRuleToList}
+                                    disabled={isSubmitting}
+                                    className="ml-2 rounded-2xl bg-primary p-3"
+                                >
                                     <Ionicons name="add" size={20} color="#FFFFFF" />
                                 </TouchableOpacity>
                             </View>
@@ -405,7 +426,7 @@ export default function Playbook() {
                             {rulesList.map((rule, idx) => (
                                 <View key={idx} className="mt-2 flex-row items-center justify-between rounded-xl bg-background px-3 py-2 border border-border">
                                     <Text className="flex-1 text-xs text-text-primary">{idx + 1}. {rule}</Text>
-                                    <TouchableOpacity onPress={() => removeRule(idx)}>
+                                    <TouchableOpacity onPress={() => removeRule(idx)} disabled={isSubmitting}>
                                         <Ionicons name="trash-outline" size={16} color="#EF4444" />
                                     </TouchableOpacity>
                                 </View>
@@ -417,6 +438,7 @@ export default function Playbook() {
                                     <Image source={{ uri: imageUri }} className="h-full w-full" />
                                     <TouchableOpacity
                                         onPress={() => setImageUri("")}
+                                        disabled={isSubmitting}
                                         className="absolute right-2 top-2 rounded-full bg-black/60 p-1.5"
                                     >
                                         <Ionicons name="close" size={16} color="#FFFFFF" />
@@ -426,6 +448,7 @@ export default function Playbook() {
                                 <View className="flex-row space-x-3 mt-1">
                                     <TouchableOpacity
                                         onPress={pickImageFromGallery}
+                                        disabled={isSubmitting}
                                         className="flex-1 flex-row items-center justify-center rounded-2xl border border-border bg-background py-3"
                                     >
                                         <Ionicons name="image-outline" size={18} color="#3B82F6" />
@@ -433,6 +456,7 @@ export default function Playbook() {
                                     </TouchableOpacity>
                                     <TouchableOpacity
                                         onPress={takePhotoWithCamera}
+                                        disabled={isSubmitting}
                                         className="flex-1 flex-row items-center justify-center rounded-2xl border border-border bg-background py-3"
                                     >
                                         <Ionicons name="camera-outline" size={18} color="#3B82F6" />
@@ -442,12 +466,19 @@ export default function Playbook() {
                             )}
                         </ScrollView>
 
+                        {/* Save Button with Spinner and Disabled State */}
                         <TouchableOpacity
                             onPress={addPlan}
+                            disabled={isSubmitting}
                             activeOpacity={0.85}
-                            className="mt-4 rounded-2xl bg-primary py-4 items-center justify-center"
+                            className={`mt-4 rounded-2xl bg-primary py-4 items-center justify-center flex-row ${isSubmitting ? "opacity-70" : ""
+                                }`}
                         >
-                            <Text className="text-sm font-bold text-white">Save Strategy</Text>
+                            {isSubmitting ? (
+                                <ActivityIndicator size="small" color="#FFFFFF" />
+                            ) : (
+                                <Text className="text-sm font-bold text-white">Save Strategy</Text>
+                            )}
                         </TouchableOpacity>
                     </View>
                 </KeyboardAvoidingView>

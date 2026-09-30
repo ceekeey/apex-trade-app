@@ -20,51 +20,50 @@ import {
 const SERVER_URI = "https://jornal.rgmrabagardama.com.ng/api";
 
 const PAIRS = [
-    // Forex
-    "EURUSD",
-    "GBPUSD",
-    "USDJPY",
-    "USDCHF",
-    "AUDUSD",
-    "USDCAD",
 
     // Commodities / Crypto
-    "XAUUSD",
-    "ETHUSD",
+    "ADAUSD", "BCHUSD", "BTCUSD", "DOGEUSD", "DOTUSD", "ETHUSD",
+    "LINKUSD", "LTCUSD", "SOLUSD", "XAGEUR", "XAGUSD", "XAUUSD",
+    "XCUUSD", "XPDUSD", "XPTUSD", "XRPUSD",
 
     // Volatility Indices
-    "R_10",
-    "R_25",
-    "R_50",
-    "R_75",
-    "R_100",
-
-    // Volatility 1s
-    "1HZ10V",
-    "1HZ25V",
-    "1HZ50V",
-    "1HZ75V",
-    "1HZ100V",
-
-    // New Volatility 1s
-    "1HZ15V",
-    "1HZ30V",
-    "1HZ90V",
+    "Volatility 10", "Volatility 10 (1s)", "Volatility 15 (1s)",
+    "Volatility 25", "Volatility 25 (1s)", "Volatility 30 (1s)",
+    "Volatility 50", "Volatility 50 (1s)", "Volatility 75",
+    "Volatility 75 (1s)", "Volatility 90 (1s)", "Volatility 100",
+    "Volatility 100 (1s)",
 
     // Jump Indices
-    "JD10",
-    "JD25",
-    "JD50",
-    "JD75",
-    "JD100",
+    "Jump 10", "Jump 25", "Jump 50", "Jump 75", "Jump 100",
 
     // Boom / Crash
-    "BOOM300N",
-    "BOOM500",
-    "BOOM1000",
-    "CRASH300N",
-    "CRASH500",
-    "CRASH1000",
+    "Boom 50", "Boom 150", "Boom 300", "Boom 500", "Boom 600",
+    "Boom 900", "Boom 1000",
+    "Crash 50", "Crash 150", "Crash 300", "Crash 500", "Crash 600",
+    "Crash 900", "Crash 1000",
+
+    // Forex
+    "AUDCAD",
+    "AUDCHF",
+    "AUDJPY",
+    "AUDNZD",
+    "CADCHF",
+    "CADJPY",
+    "CHFJPY",
+    "EURAUD",
+    "EURCAD",
+    "EURCHF",
+    "EURGBP",
+    "EURJPY",
+    "EURNZD",
+    "GBPAUD",
+    "GBPCAD",
+    "GBPCHF",
+    "GBPJPY",
+    "GBPNZD",
+    "NZDCHF",
+    "NZDJPY",
+
 ];
 
 const MOODS = [
@@ -106,6 +105,83 @@ interface TradingPlan {
     id: string;
     name: string;
 }
+
+// =========================
+// EXTERNAL COMPONENTS (Prevents Keyboard Dismissal)
+// =========================
+
+const InputField = ({
+    label,
+    value,
+    onChangeText,
+    placeholder,
+    icon,
+}: {
+    label: string;
+    value: string;
+    onChangeText: (value: string) => void;
+    placeholder: string;
+    icon: keyof typeof Ionicons.glyphMap;
+}) => {
+    return (
+        <View className="mb-4 flex-1">
+            <Text className="mb-2 text-xs font-semibold text-slate-400">
+                {label}
+            </Text>
+
+            <View className="flex-row items-center rounded-xl border border-slate-700 bg-slate-900 px-3">
+                <Ionicons
+                    name={icon}
+                    size={18}
+                    color="#94A3B8"
+                />
+
+                <TextInput
+                    value={value}
+                    onChangeText={onChangeText}
+                    placeholder={placeholder}
+                    placeholderTextColor="#64748B"
+                    keyboardType="decimal-pad"
+                    className="ml-2 flex-1 py-3 text-sm text-white"
+                />
+            </View>
+        </View>
+    );
+};
+
+const MoodButton = ({
+    mood,
+    selected,
+    onPress,
+}: {
+    mood: (typeof MOODS)[number];
+    selected: boolean;
+    onPress: () => void;
+}) => {
+    return (
+        <TouchableOpacity
+            onPress={onPress}
+            activeOpacity={0.8}
+            className={`mb-3 mr-2 flex-row items-center rounded-xl border px-3 py-3 ${selected
+                ? "border-blue-500 bg-blue-500/15"
+                : "border-slate-700 bg-slate-900"
+                }`}
+        >
+            <Ionicons
+                name={mood.icon}
+                size={17}
+                color={selected ? "#60A5FA" : "#94A3B8"}
+            />
+
+            <Text
+                className={`ml-2 text-xs font-medium ${selected ? "text-blue-400" : "text-slate-400"
+                    }`}
+            >
+                {mood.label}
+            </Text>
+        </TouchableOpacity>
+    );
+};
 
 export default function CreateJournalScreen() {
     const router = useRouter();
@@ -205,8 +281,6 @@ export default function CreateJournalScreen() {
         try {
             const url = `${SERVER_URI}/plans/allplans`;
 
-            console.log("Fetching plans from:", url);
-
             const response = await fetch(url, {
                 method: "GET",
                 headers: {
@@ -217,45 +291,15 @@ export default function CreateJournalScreen() {
 
             const responseText = await response.text();
 
-            console.log("Plans status:", response.status);
-            console.log("Plans response:", responseText);
-
             let data: any;
 
             try {
                 data = JSON.parse(responseText);
             } catch (parseError) {
-                console.log(
-                    "Plans JSON parse error:",
-                    parseError,
-                );
-
-                console.log(
-                    "Raw server response:",
-                    responseText,
-                );
-
-                Alert.alert(
-                    "Plans Error",
-                    `Server returned ${response.status} instead of JSON.`,
-                );
-
                 return;
             }
 
             if (!response.ok) {
-                console.log(
-                    "Plans API error:",
-                    data,
-                );
-
-                Alert.alert(
-                    "Plans Error",
-                    data?.message ||
-                    data?.error ||
-                    "Failed to load trading plans.",
-                );
-
                 return;
             }
 
@@ -266,52 +310,19 @@ export default function CreateJournalScreen() {
                 [];
 
             if (!Array.isArray(plans)) {
-                console.log(
-                    "Unexpected plans response:",
-                    data,
-                );
-
-                Alert.alert(
-                    "Plans Error",
-                    "The server returned an invalid plans format.",
-                );
-
                 return;
             }
 
-            const formattedPlans: TradingPlan[] =
-                plans
-                    .map((plan: any) => ({
-                        id:
-                            plan._id ||
-                            plan.id ||
-                            "",
-                        name:
-                            plan.name ||
-                            plan.title ||
-                            "Unnamed Plan",
-                    }))
-                    .filter(
-                        (plan: TradingPlan) =>
-                            plan.id && plan.name,
-                    );
-
-            console.log(
-                "Formatted plans:",
-                formattedPlans,
-            );
+            const formattedPlans: TradingPlan[] = plans
+                .map((plan: any) => ({
+                    id: plan._id || plan.id || "",
+                    name: plan.name || plan.title || "Unnamed Plan",
+                }))
+                .filter((plan: TradingPlan) => plan.id && plan.name);
 
             setPlansList(formattedPlans);
         } catch (error) {
-            console.log(
-                "Fetch plans network error:",
-                error,
-            );
-
-            Alert.alert(
-                "Network Error",
-                "Unable to connect to the plans server.",
-            );
+            console.log("Fetch plans network error:", error);
         }
     };
 
@@ -319,9 +330,7 @@ export default function CreateJournalScreen() {
     // IMAGE PICKER
     // =========================
 
-    const openImagePicker = (
-        timeframe: ScreenshotType
-    ) => {
+    const openImagePicker = (timeframe: ScreenshotType) => {
         setSelectedTimeframe(timeframe);
         setImagePickerVisible(true);
     };
@@ -368,11 +377,6 @@ export default function CreateJournalScreen() {
             }
         } catch (error) {
             console.log("Camera error:", error);
-
-            Alert.alert(
-                "Camera Error",
-                "Unable to open the camera."
-            );
         } finally {
             setImagePickerVisible(false);
         }
@@ -420,19 +424,12 @@ export default function CreateJournalScreen() {
             }
         } catch (error) {
             console.log("Gallery error:", error);
-
-            Alert.alert(
-                "Gallery Error",
-                "Unable to select an image."
-            );
         } finally {
             setImagePickerVisible(false);
         }
     };
 
-    const removeScreenshot = (
-        timeframe: ScreenshotType
-    ) => {
+    const removeScreenshot = (timeframe: ScreenshotType) => {
         setScreenshots((previous) => ({
             ...previous,
             [timeframe]: null,
@@ -443,15 +440,11 @@ export default function CreateJournalScreen() {
     // IMAGE PAYLOAD
     // =========================
 
-    const formatImagePayload = (
-        uri: string | null
-    ) => {
+    const formatImagePayload = (uri: string | null) => {
         if (!uri) return undefined;
 
         if (uri.startsWith("data:")) {
-            const match = uri.match(
-                /^data:(.*?);base64,(.*)$/
-            );
+            const match = uri.match(/^data:(.*?);base64,(.*)$/);
 
             if (match) {
                 return {
@@ -496,104 +489,45 @@ export default function CreateJournalScreen() {
         const parsedRisk = Number.parseFloat(risk);
         const parsedPnl = Number.parseFloat(pnl);
 
-        const numericEntry = Number.isFinite(entryPrice)
-            ? entryPrice
-            : 0;
-
-        const numericStopLoss = Number.isFinite(
-            stopLossPrice
-        )
-            ? stopLossPrice
-            : 0;
-
-        const numericTakeProfit = Number.isFinite(
-            takeProfitPrice
-        )
-            ? takeProfitPrice
-            : 0;
-
-        const numericExit = Number.isFinite(
-            actualExitPrice
-        )
-            ? actualExitPrice
-            : 0;
-
-        const numericLotSize = Number.isFinite(
-            parsedLotSize
-        )
-            ? parsedLotSize
-            : 0;
-
-        const numericRisk = Number.isFinite(parsedRisk)
-            ? parsedRisk
-            : 0;
-
-        const numericPnl = Number.isFinite(parsedPnl)
-            ? parsedPnl
-            : 0;
+        const numericEntry = Number.isFinite(entryPrice) ? entryPrice : 0;
+        const numericStopLoss = Number.isFinite(stopLossPrice) ? stopLossPrice : 0;
+        const numericTakeProfit = Number.isFinite(takeProfitPrice) ? takeProfitPrice : 0;
+        const numericExit = Number.isFinite(actualExitPrice) ? actualExitPrice : 0;
+        const numericLotSize = Number.isFinite(parsedLotSize) ? parsedLotSize : 0;
+        const numericRisk = Number.isFinite(parsedRisk) ? parsedRisk : 0;
+        const numericPnl = Number.isFinite(parsedPnl) ? parsedPnl : 0;
 
         try {
             setIsSubmitting(true);
 
             const payload = {
-                // Trading information
                 plan:
                     planId && !planId.startsWith("fallback_")
                         ? planId
                         : undefined,
-
                 asset: pair,
-
                 type: tradeType,
-
-                // Prices
                 entryPrice: numericEntry,
                 stopLoss: numericStopLoss,
                 takeProfit: numericTakeProfit,
                 exitPrice: numericExit,
-
-                // Position
                 lotSize: numericLotSize,
                 risk: numericRisk,
-
-                // Result
                 pnl: numericPnl,
                 result,
-
-                // Setup
                 setup: planName || "General Setup",
-
-                // Emotions
                 emotion: beforeMood || "CONFIDENT",
                 afterEmotion: afterMood || undefined,
-
-                // Notes
                 notes:
                     notes +
-                    (lesson
-                        ? `\nLesson/Takeaway: ${lesson}`
-                        : ""),
-
-                // Chart screenshots
-                highTimeFrameImage:
-                    formatImagePayload(screenshots["4H"]),
-
-                mediumTimeFrameImage:
-                    formatImagePayload(screenshots["15M"]),
-
-                lowTimeFrameImage:
-                    formatImagePayload(screenshots["5M"]),
-
-                // Date
+                    (lesson ? `\nLesson/Takeaway: ${lesson}` : ""),
+                highTimeFrameImage: formatImagePayload(screenshots["4H"]),
+                mediumTimeFrameImage: formatImagePayload(screenshots["15M"]),
+                lowTimeFrameImage: formatImagePayload(screenshots["5M"]),
                 date: dateString
                     ? new Date(dateString).toISOString()
                     : new Date().toISOString(),
             };
-
-            console.log(
-                "Journal payload:",
-                JSON.stringify(payload, null, 2)
-            );
 
             const response = await fetch(
                 `${SERVER_URI}/jornal/create`,
@@ -608,29 +542,19 @@ export default function CreateJournalScreen() {
             );
 
             const responseText = await response.text();
-
             let resultJson: any;
 
             try {
                 resultJson = JSON.parse(responseText);
             } catch (error) {
-                console.log(
-                    "Non-JSON response:",
-                    responseText
-                );
-
                 Alert.alert(
                     "Server Error",
                     "Server returned an unexpected response format."
                 );
-
                 return;
             }
 
-            if (
-                response.ok &&
-                resultJson.success
-            ) {
+            if (response.ok && resultJson.success) {
                 Alert.alert(
                     "Journal Saved",
                     "Your trading journal has been saved successfully.",
@@ -650,11 +574,6 @@ export default function CreateJournalScreen() {
                 );
             }
         } catch (error) {
-            console.log(
-                "Save journal error:",
-                error
-            );
-
             Alert.alert(
                 "Network Error",
                 "Unable to connect to server."
@@ -665,94 +584,7 @@ export default function CreateJournalScreen() {
     };
 
     // =========================
-    // INPUT COMPONENT
-    // =========================
-
-    const InputField = ({
-        label,
-        value,
-        onChangeText,
-        placeholder,
-        icon,
-    }: {
-        label: string;
-        value: string;
-        onChangeText: (value: string) => void;
-        placeholder: string;
-        icon: keyof typeof Ionicons.glyphMap;
-    }) => {
-        return (
-            <View className="mb-4 flex-1">
-                <Text className="mb-2 text-xs font-semibold text-slate-400">
-                    {label}
-                </Text>
-
-                <View className="flex-row items-center rounded-xl border border-slate-700 bg-slate-900 px-3">
-                    <Ionicons
-                        name={icon}
-                        size={18}
-                        color="#94A3B8"
-                    />
-
-                    <TextInput
-                        value={value}
-                        onChangeText={onChangeText}
-                        placeholder={placeholder}
-                        placeholderTextColor="#64748B"
-                        keyboardType="decimal-pad"
-                        className="ml-2 flex-1 py-3 text-sm text-white"
-                    />
-                </View>
-            </View>
-        );
-    };
-
-    // =========================
-    // MOOD BUTTON
-    // =========================
-
-    const MoodButton = ({
-        mood,
-        selected,
-        onPress,
-    }: {
-        mood: (typeof MOODS)[number];
-        selected: boolean;
-        onPress: () => void;
-    }) => {
-        return (
-            <TouchableOpacity
-                onPress={onPress}
-                activeOpacity={0.8}
-                className={`mb-3 mr-2 flex-row items-center rounded-xl border px-3 py-3 ${selected
-                    ? "border-blue-500 bg-blue-500/15"
-                    : "border-slate-700 bg-slate-900"
-                    }`}
-            >
-                <Ionicons
-                    name={mood.icon}
-                    size={17}
-                    color={
-                        selected
-                            ? "#60A5FA"
-                            : "#94A3B8"
-                    }
-                />
-
-                <Text
-                    className={`ml-2 text-xs font-medium ${selected
-                        ? "text-blue-400"
-                        : "text-slate-400"
-                        }`}
-                >
-                    {mood.label}
-                </Text>
-            </TouchableOpacity>
-        );
-    };
-
-    // =========================
-    // SCREENSHOT CARD
+    // SCREENSHOT CARD COMPONENT
     // =========================
 
     const ScreenshotCard = ({
@@ -826,11 +658,8 @@ export default function CreateJournalScreen() {
     return (
         <KeyboardAvoidingView
             className="flex-1 bg-slate-950"
-            behavior={
-                Platform.OS === "ios"
-                    ? "padding"
-                    : undefined
-            }
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
         >
             {/* ================= HEADER ================= */}
 
@@ -861,9 +690,12 @@ export default function CreateJournalScreen() {
 
             <ScrollView
                 showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                automaticallyAdjustKeyboardInsets={true}
+                keyboardDismissMode="interactive"
                 contentContainerStyle={{
                     paddingHorizontal: 20,
-                    paddingBottom: 50,
+                    paddingBottom: 250,
                     paddingTop: 20,
                 }}
             >
@@ -1111,17 +943,17 @@ export default function CreateJournalScreen() {
 
                     <ScreenshotCard
                         timeframe="4H"
-                        title="4H — HIGHER TIMEFRAME"
+                        title="4H / 1H — HIGHER TIMEFRAME"
                     />
 
                     <ScreenshotCard
                         timeframe="15M"
-                        title="15M — MEDIUM TIMEFRAME"
+                        title="15M / 5M — MEDIUM TIMEFRAME"
                     />
 
                     <ScreenshotCard
                         timeframe="5M"
-                        title="5M — ENTRY TIMEFRAME"
+                        title="5M / 1M — ENTRY TIMEFRAME"
                     />
                 </View>
 
@@ -1156,8 +988,7 @@ export default function CreateJournalScreen() {
                     {(
                         ["Win", "Loss", "Break Even"] as const
                     ).map((item) => {
-                        const selected =
-                            result === item;
+                        const selected = result === item;
 
                         return (
                             <TouchableOpacity
@@ -1250,9 +1081,7 @@ export default function CreateJournalScreen() {
                     activeOpacity={0.85}
                     disabled={isSubmitting}
                     onPress={saveJournal}
-                    className={`mt-7 flex-row items-center justify-center rounded-2xl py-4 ${isSubmitting
-                        ? "bg-blue-900"
-                        : "bg-blue-600"
+                    className={`mt-7 flex-row items-center justify-center rounded-2xl py-4 ${isSubmitting ? "bg-blue-900" : "bg-blue-600"
                         }`}
                 >
                     {isSubmitting ? (
@@ -1318,8 +1147,7 @@ export default function CreateJournalScreen() {
                             showsVerticalScrollIndicator={false}
                         >
                             {PAIRS.map((item) => {
-                                const selected =
-                                    pair === item;
+                                const selected = pair === item;
 
                                 return (
                                     <TouchableOpacity
@@ -1419,8 +1247,7 @@ export default function CreateJournalScreen() {
                                 </View>
                             ) : (
                                 plansList.map((plan) => {
-                                    const selected =
-                                        planId === plan.id;
+                                    const selected = planId === plan.id;
 
                                     return (
                                         <TouchableOpacity

@@ -1,6 +1,7 @@
+import { useAuth } from "@/context/AuthContext"; // Adjust path to your AuthContext
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import {
     ActivityIndicator,
     ScrollView,
@@ -12,7 +13,6 @@ import {
     heightPercentageToDP as hp,
     widthPercentageToDP as wp,
 } from "react-native-responsive-screen";
-import { useAuth } from "@/context/AuthContext"; // Adjust path to your AuthContext
 
 const SERVER_URI = "https://jornal.rgmrabagardama.com.ng/api";
 
@@ -74,33 +74,60 @@ export default function Dashboard() {
         day: "numeric",
     }).format(new Date());
 
-    useEffect(() => {
-        const fetchDashboardData = async () => {
-            if (!token) return;
+    useFocusEffect(
+        useCallback(() => {
+            let isMounted = true;
 
-            try {
-                setIsLoading(true);
-                const response = await fetch(`${SERVER_URI}/jornal/all`, {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                });
+            const fetchDashboardData = async () => {
+                if (!token) return;
 
-                const data = await response.json();
-                const items: JournalEntry[] = Array.isArray(data)
-                    ? data
-                    : data.journals || data.data || [];
+                try {
+                    setIsLoading(true);
+                    const response = await fetch(`${SERVER_URI}/jornal/all`, {
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                            Accept: "application/json",
+                        },
+                    });
 
-                calculateDashboardMetrics(items);
-            } catch (error) {
-                console.log("Error fetching dashboard data:", error);
-            } finally {
-                setIsLoading(false);
-            }
-        };
+                    // Read response as text first to safely check for empty/invalid payloads
+                    const responseText = await response.text();
 
-        fetchDashboardData();
-    }, [token]);
+                    if (!responseText || responseText.trim() === "") {
+                        throw new Error("Server returned an empty response body.");
+                    }
+
+                    let data;
+                    try {
+                        data = JSON.parse(responseText);
+                    } catch (parseError) {
+                        // console.log("Raw invalid server response snippet:", responseText.substring(0, 150));
+                        throw new Error("Server response was cut off or returned invalid JSON format.");
+                    }
+
+                    const items: JournalEntry[] = Array.isArray(data)
+                        ? data
+                        : data.journals || data.data || [];
+
+                    if (isMounted) {
+                        calculateDashboardMetrics(items);
+                    }
+                } catch (error) {
+                    // console.log("Error fetching dashboard data:", error);
+                } finally {
+                    if (isMounted) {
+                        setIsLoading(false);
+                    }
+                }
+            };
+
+            fetchDashboardData();
+
+            return () => {
+                isMounted = false;
+            };
+        }, [token])
+    );
 
     const calculateDashboardMetrics = (items: JournalEntry[]) => {
         const total = items.length;
@@ -132,8 +159,8 @@ export default function Dashboard() {
         const calculatedWinRate = Math.round((wins / total) * 100);
         setWinRate(`${calculatedWinRate}%`);
 
-        // 3. R-Multiple Estimation (or fallback based on PnL proportions)
-        const estimatedR = (cumulativePnl / 50).toFixed(1); // Assuming standard risk unit baseline if not explicitly tracked
+        // 3. R-Multiple Estimation
+        const estimatedR = (cumulativePnl / 50).toFixed(1);
         setRMultiple(`${cumulativePnl >= 0 ? "+" : ""}${estimatedR}R`);
 
         // 4. Map recent trades (taking up to the latest 5 trades)

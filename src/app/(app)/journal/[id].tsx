@@ -1,8 +1,10 @@
+import { useAuth } from "@/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import {
+    ActivityIndicator,
     Alert,
     Image,
     KeyboardAvoidingView,
@@ -14,10 +16,8 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
-import { useAuth } from "@/context/AuthContext";
 
 const SERVER_URI = "https://jornal.rgmrabagardama.com.ng/api";
-
 
 const PAIRS = [
     "EURUSD",
@@ -31,36 +31,12 @@ const PAIRS = [
 ];
 
 const MOODS = [
-    {
-        label: "Focused",
-        value: "FOCUSED",
-        icon: "eye-outline" as const,
-    },
-    {
-        label: "Confident",
-        value: "CONFIDENT",
-        icon: "flash-outline" as const,
-    },
-    {
-        label: "Calm",
-        value: "CALM",
-        icon: "leaf-outline" as const,
-    },
-    {
-        label: "Uncertain",
-        value: "UNCERTAIN",
-        icon: "help-circle-outline" as const,
-    },
-    {
-        label: "Fearful",
-        value: "FEARFUL",
-        icon: "alert-circle-outline" as const,
-    },
-    {
-        label: "Greedy",
-        value: "GREEDY",
-        icon: "trending-up-outline" as const,
-    },
+    { label: "Focused", value: "FOCUSED", icon: "eye-outline" as const },
+    { label: "Confident", value: "CONFIDENT", icon: "flash-outline" as const },
+    { label: "Calm", value: "CALM", icon: "leaf-outline" as const },
+    { label: "Uncertain", value: "UNCERTAIN", icon: "help-circle-outline" as const },
+    { label: "Fearful", value: "FEARFUL", icon: "alert-circle-outline" as const },
+    { label: "Greedy", value: "GREEDY", icon: "trending-up-outline" as const },
 ];
 
 type ScreenshotType = "4H" | "15M" | "5M";
@@ -70,18 +46,38 @@ interface TradingPlan {
     name: string;
 }
 
+const formatDisplayUri = (img: any): string | null => {
+    if (!img) return null;
+
+    if (typeof img === "object" && img.data) {
+        const mime = img.mimeType || "image/jpeg";
+        return img.data.startsWith("data:") ? img.data : `data:${mime};base64,${img.data}`;
+    }
+
+    if (typeof img === "string") {
+        if (img.startsWith("http") || img.startsWith("data:") || img.startsWith("file:")) {
+            return img;
+        }
+        return `data:image/jpeg;base64,${img}`;
+    }
+
+    return null;
+};
+
 export default function DailyJournal() {
     const router = useRouter();
-    const { date } = useLocalSearchParams();
+    const { date, id: journalId } = useLocalSearchParams<{ date?: string; id?: string }>();
     const { token } = useAuth();
 
+    const [isLoading, setIsLoading] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
     const [pair, setPair] = useState("");
     const [planId, setPlanId] = useState("");
     const [planName, setPlanName] = useState("");
     const [plansList, setPlansList] = useState<TradingPlan[]>([]);
 
-    const [beforeMood, setBeforeMood] = useState("");
-    const [afterMood, setAfterMood] = useState("");
+    const [beforeMood, setBeforeMood] = useState("CALM");
+    const [afterMood, setAfterMood] = useState("CALM");
 
     const [entry, setEntry] = useState("");
     const [stopLoss, setStopLoss] = useState("");
@@ -104,49 +100,7 @@ export default function DailyJournal() {
     });
 
     const [imagePickerVisible, setImagePickerVisible] = useState(false);
-    const [selectedTimeframe, setSelectedTimeframe] =
-        useState<ScreenshotType | null>(null);
-
-    useEffect(() => {
-        const fetchPlans = async () => {
-            try {
-                const response = await fetch(
-                    `${SERVER_URI}/plans/allplans`,
-                    {
-                        headers: {
-                            Authorization: `Bearer ${token}`,
-                        },
-                    }
-                );
-
-                const resultJson = await response.json();
-
-                if (
-                    response.ok &&
-                    resultJson.success &&
-                    Array.isArray(resultJson.plans)
-                ) {
-                    const formattedPlans: TradingPlan[] = resultJson.plans
-                        .map((p: any) => ({
-                            id: p._id || p.id,
-                            name: p.name || p.title
-                        }))
-                        .filter((p: TradingPlan) => p.id && p.name);
-
-                    setPlansList(formattedPlans);
-                } else {
-                    setDefaultPlans();
-                }
-            } catch (error) {
-                console.log("Error fetching plans:", error);
-                setDefaultPlans();
-            }
-        };
-
-        if (token) {
-            fetchPlans();
-        }
-    }, [token]);
+    const [selectedTimeframe, setSelectedTimeframe] = useState<ScreenshotType | null>(null);
 
     const setDefaultPlans = () => {
         setPlansList([
@@ -156,6 +110,40 @@ export default function DailyJournal() {
             { id: "fallback_4", name: "Supply & Demand" },
         ]);
     };
+
+    const fetchPlans = useCallback(async () => {
+        if (!token) return;
+
+        try {
+            const response = await fetch(`${SERVER_URI}/plans/allplans`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+
+            const resultJson = await response.json();
+
+            if (response.ok && resultJson.success && Array.isArray(resultJson.plans)) {
+                const formattedPlans: TradingPlan[] = resultJson.plans
+                    .map((p: any) => ({
+                        id: p._id || p.id,
+                        name: p.name || p.title,
+                    }))
+                    .filter((p: TradingPlan) => p.id && p.name);
+
+                setPlansList(formattedPlans);
+            } else {
+                setDefaultPlans();
+            }
+        } catch (error) {
+            console.log("Error fetching plans:", error);
+            setDefaultPlans();
+        }
+    }, [token]);
+
+    useFocusEffect(
+        useCallback(() => {
+            fetchPlans();
+        }, [fetchPlans])
+    );
 
     const openImagePicker = (timeframe: ScreenshotType) => {
         setSelectedTimeframe(timeframe);
@@ -171,100 +159,140 @@ export default function DailyJournal() {
         if (!selectedTimeframe) return;
 
         try {
-            let result: ImagePicker.ImagePickerResult;
+            let pickerResult: ImagePicker.ImagePickerResult;
+
+            const pickerOptions: ImagePicker.ImagePickerOptions = {
+                mediaTypes: ["images"],
+                allowsEditing: true,
+                quality: 0.4,
+                base64: true,
+            };
 
             if (source === "camera") {
                 const permission = await ImagePicker.requestCameraPermissionsAsync();
                 if (!permission.granted) {
-                    Alert.alert("Camera Permission Required", "Please allow camera access.");
+                    Alert.alert("Camera Permission", "Please allow camera access.");
                     return;
                 }
-                result = await ImagePicker.launchCameraAsync({
-                    mediaTypes: ["images"],
-                    allowsEditing: true,
-                    quality: 0.8,
-                    base64: true,
-                });
+                pickerResult = await ImagePicker.launchCameraAsync(pickerOptions);
             } else {
                 const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
                 if (!permission.granted) {
-                    Alert.alert("Gallery Permission Required", "Please allow photo library access.");
+                    Alert.alert("Gallery Permission", "Please allow gallery access.");
                     return;
                 }
-                result = await ImagePicker.launchImageLibraryAsync({
-                    mediaTypes: ["images"],
-                    allowsEditing: true,
-                    quality: 0.8,
-                    base64: true,
-                });
+                pickerResult = await ImagePicker.launchImageLibraryAsync(pickerOptions);
             }
 
-            if (result.canceled) return;
+            if (pickerResult.canceled) return;
 
-            const asset = result.assets?.[0];
+            const asset = pickerResult.assets?.[0];
             if (!asset) return;
 
-            const imageData = asset.base64
+            const base64Data = asset.base64
                 ? `data:image/jpeg;base64,${asset.base64}`
                 : asset.uri;
 
             setScreenshots((previous) => ({
                 ...previous,
-                [selectedTimeframe]: imageData,
+                [selectedTimeframe]: base64Data,
             }));
 
             closeImagePicker();
         } catch (error) {
-            console.error("Image picker error:", error);
-            Alert.alert("Image Error", "Something went wrong while selecting the image.");
+            console.error("Image selection error:", error);
+            Alert.alert("Error", "Could not pick image.");
         }
     };
 
     const removeScreenshot = (timeframe: ScreenshotType) => {
-        Alert.alert("Remove Screenshot", `Remove the ${timeframe} chart screenshot?`, [
-            { text: "Cancel", style: "cancel" },
-            {
-                text: "Remove",
-                style: "destructive",
-                onPress: () => {
-                    setScreenshots((previous) => ({
-                        ...previous,
-                        [timeframe]: null,
-                    }));
+        setScreenshots((prev) => ({ ...prev, [timeframe]: null }));
+    };
+
+    const handleDeleteJournal = () => {
+        if (!journalId) return;
+
+        Alert.alert(
+            "Delete Journal",
+            "Are you sure you want to delete this journal entry? This action cannot be undone.",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            setIsDeleting(true);
+                            const response = await fetch(`${SERVER_URI}/jornal/delete/${journalId}`, {
+                                method: "DELETE",
+                                headers: {
+                                    Authorization: `Bearer ${token}`,
+                                },
+                            });
+
+                            const resData = await response.json();
+
+                            if (response.ok && resData.success) {
+                                Alert.alert("Success", "Journal entry deleted successfully.", [
+                                    { text: "OK", onPress: () => router.back() },
+                                ]);
+                            } else {
+                                Alert.alert("Error", resData.message || "Failed to delete journal entry.");
+                            }
+                        } catch (error) {
+                            console.error("Error deleting journal:", error);
+                            Alert.alert("Error", "Server error while attempting to delete entry.");
+                        } finally {
+                            setIsDeleting(false);
+                        }
+                    },
                 },
-            },
-        ]);
+            ]
+        );
     };
 
     const saveJournal = async () => {
         if (!pair) {
-            Alert.alert("Pair required", "Select the pair you traded.");
+            Alert.alert("Required Field", "Please select a trading pair.");
+            return;
+        }
+
+        if (!entry) {
+            Alert.alert("Required Field", "Please enter an entry price.");
             return;
         }
 
         try {
-            const formatImagePayload = (uri: string | null) => {
-                if (!uri) return undefined;
+            setIsLoading(true);
+
+            const prepareImagePayload = (imageUri: string | null) => {
+                if (!imageUri) return { data: null, mimeType: null };
+                const cleanBase64 = imageUri.includes(",") ? imageUri.split(",")[1] : imageUri;
                 return {
-                    data: uri.includes(",") ? uri.split(",")[1] : uri,
-                    mimeType: "image/png"
+                    data: cleanBase64,
+                    mimeType: "image/jpeg",
                 };
             };
 
             const payload = {
-                plan: planId && !planId.startsWith("fallback_") ? planId : undefined,
                 asset: pair,
                 type: "LONG",
-                pnl: result === "Win" ? 150.00 : result === "Loss" ? -50.00 : 0.00,
+                pnl: result === "Win" ? 100 : result === "Loss" ? -50 : 0,
                 entryPrice: parseFloat(entry) || 0,
-                exitPrice: parseFloat(takeProfit) || 0,
+                stopLoss: parseFloat(stopLoss) || 0,
+                takeProfit: parseFloat(takeProfit) || 0,
+                exitPrice: parseFloat(takeProfit) || parseFloat(entry) || 0,
                 lotSize: 1.0,
+                risk: parseFloat(risk) || 0,
+                result: result,
                 setup: planName || "General",
-                emotion: beforeMood ? beforeMood.toUpperCase() : "CONFIDENT",
+                emotion: beforeMood.toUpperCase(),
+                afterEmotion: afterMood.toUpperCase(),
                 notes: notes + (lesson ? `\nLesson: ${lesson}` : ""),
-                highTimeFramelmage: formatImagePayload(screenshots["4H"]),
-                mediumTimeFramelmage: formatImagePayload(screenshots["15M"]),
-                lowTimeFramelmage: formatImagePayload(screenshots["5M"]),
+                plan: planId && !planId.startsWith("fallback_") ? planId : null,
+                highTimeFrameImage: prepareImagePayload(screenshots["4H"]),
+                mediumTimeFrameImage: prepareImagePayload(screenshots["15M"]),
+                lowTimeFrameImage: prepareImagePayload(screenshots["5M"]),
                 date: typeof date === "string" ? date : new Date().toISOString(),
             };
 
@@ -277,27 +305,20 @@ export default function DailyJournal() {
                 body: JSON.stringify(payload),
             });
 
-            const responseText = await response.text();
-            let resultJson;
-
-            try {
-                resultJson = JSON.parse(responseText);
-            } catch (e) {
-                console.log("Non-JSON response received:", responseText);
-                Alert.alert("Server Error", "Server returned an unexpected response format.");
-                return;
-            }
+            const resultJson = await response.json();
 
             if (response.ok && resultJson.success) {
-                Alert.alert("Journal Saved", "Your trading journal has been saved.", [
-                    { text: "Done", onPress: () => router.back() },
+                Alert.alert("Success", "Journal created successfully!", [
+                    { text: "OK", onPress: () => router.back() },
                 ]);
             } else {
-                Alert.alert("Error", resultJson.error || resultJson.message || "Failed to save journal.");
+                Alert.alert("Validation Error", resultJson.message || "Failed to create journal entry.");
             }
         } catch (error) {
-            console.log("Save journal error:", error);
-            Alert.alert("Network Error", "Unable to connect to server.");
+            console.log("Error creating journal:", error);
+            Alert.alert("Error", "Server error or request payload was too large.");
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -315,25 +336,42 @@ export default function DailyJournal() {
                     paddingBottom: 50,
                 }}
             >
-                <View className="flex-row items-center">
-                    <TouchableOpacity
-                        onPress={() => router.back()}
-                        activeOpacity={0.8}
-                        className="h-11 w-11 items-center justify-center rounded-2xl border border-border bg-surface"
-                    >
-                        <Ionicons name="arrow-back" size={20} color="#F8FAFC" />
-                    </TouchableOpacity>
+                {/* Header Navigation */}
+                <View className="flex-row items-center justify-between">
+                    <View className="flex-row items-center flex-1">
+                        <TouchableOpacity
+                            onPress={() => router.back()}
+                            activeOpacity={0.8}
+                            className="h-11 w-11 items-center justify-center rounded-2xl border border-border bg-surface"
+                        >
+                            <Ionicons name="arrow-back" size={20} color="#F8FAFC" />
+                        </TouchableOpacity>
 
-                    <View className="ml-3 flex-1">
-                        <Text className="text-2xl font-bold text-text-primary">Add Journal</Text>
-                        <Text className="mt-1 text-xs text-text-muted">
-                            {typeof date === "string" ? date : "Today"} • Review your trading day
-                        </Text>
+                        <View className="ml-3 flex-1">
+                            <Text className="text-2xl font-bold text-text-primary">
+                                {journalId ? "Edit Journal" : "Add Journal"}
+                            </Text>
+                            <Text className="mt-1 text-xs text-text-muted">
+                                {typeof date === "string" ? date : "Today"} • Review your trading day
+                            </Text>
+                        </View>
                     </View>
 
-                    <View className="h-10 w-10 items-center justify-center rounded-xl border border-primary/20 bg-primary/10">
-                        <Ionicons name="journal-outline" size={20} color="#3B82F6" />
-                    </View>
+                    {/* Delete Icon Button when journalId is present */}
+                    {journalId && (
+                        <TouchableOpacity
+                            onPress={handleDeleteJournal}
+                            disabled={isDeleting}
+                            activeOpacity={0.8}
+                            className="h-11 w-11 items-center justify-center rounded-2xl border border-red-500/20 bg-red-500/10 ml-2"
+                        >
+                            {isDeleting ? (
+                                <ActivityIndicator color="#EF4444" size="small" />
+                            ) : (
+                                <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                            )}
+                        </TouchableOpacity>
+                    )}
                 </View>
 
                 <SectionHeader icon="bar-chart-outline" title="Market" subtitle="What did you trade?" />
@@ -380,8 +418,8 @@ export default function DailyJournal() {
                             key={item.label}
                             label={item.label}
                             icon={item.icon}
-                            selected={beforeMood === item.label}
-                            onPress={() => setBeforeMood(item.label)}
+                            selected={beforeMood === item.value}
+                            onPress={() => setBeforeMood(item.value)}
                         />
                     ))}
                 </View>
@@ -395,7 +433,7 @@ export default function DailyJournal() {
 
                 <View className="mt-3 flex-row gap-3">
                     <InputField label="TAKE PROFIT" value={takeProfit} onChangeText={setTakeProfit} placeholder="0.00000" icon="flag-outline" keyboardType="decimal-pad" />
-                    <InputField label="RISK" value={risk} onChangeText={setRisk} placeholder="1%" icon="shield-checkmark-outline" keyboardType="decimal-pad" />
+                    <InputField label="RISK (%)" value={risk} onChangeText={setRisk} placeholder="1" icon="shield-checkmark-outline" keyboardType="decimal-pad" />
                 </View>
 
                 <SectionHeader icon="images-outline" title="Chart Analysis" subtitle="Save your analysis across timeframes." />
@@ -430,8 +468,8 @@ export default function DailyJournal() {
                             key={item.label}
                             label={item.label}
                             icon={item.icon}
-                            selected={afterMood === item.label}
-                            onPress={() => setAfterMood(item.label)}
+                            selected={afterMood === item.value}
+                            onPress={() => setAfterMood(item.value)}
                         />
                     ))}
                 </View>
@@ -483,11 +521,18 @@ export default function DailyJournal() {
 
                 <TouchableOpacity
                     activeOpacity={0.85}
+                    disabled={isLoading}
                     onPress={saveJournal}
                     className="mt-7 flex-row items-center justify-center rounded-2xl bg-primary py-4 shadow-lg"
                 >
-                    <Ionicons name="checkmark-circle-outline" size={20} color="#FFFFFF" />
-                    <Text className="ml-2 text-sm font-bold text-white">Save Journal</Text>
+                    {isLoading ? (
+                        <ActivityIndicator color="#FFFFFF" size="small" />
+                    ) : (
+                        <>
+                            <Ionicons name="checkmark-circle-outline" size={20} color="#FFFFFF" />
+                            <Text className="ml-2 text-sm font-bold text-white">Save Journal</Text>
+                        </>
+                    )}
                 </TouchableOpacity>
             </ScrollView>
 
@@ -580,12 +625,18 @@ function InputField({ label, value, onChangeText, placeholder, icon, keyboardTyp
 }
 
 function ChartScreenshot({ timeframe, title, description, image, onPick, onRemove }: any) {
+    const formattedUri = formatDisplayUri(image);
+
     return (
         <View className="mb-3 overflow-hidden rounded-3xl border border-border bg-surface">
-            {image ? (
-                <View>
+            {formattedUri ? (
+                <View className="relative">
                     <TouchableOpacity activeOpacity={0.9} onPress={onPick}>
-                        <Image source={{ uri: image }} className="h-52 w-full" resizeMode="cover" />
+                        <Image
+                            source={{ uri: formattedUri }}
+                            className="h-52 w-full"
+                            resizeMode="cover"
+                        />
                         <View className="p-4">
                             <Text className="text-sm font-bold text-text-primary">{title}</Text>
                             <Text className="mt-1 text-xs text-text-muted">{description}</Text>

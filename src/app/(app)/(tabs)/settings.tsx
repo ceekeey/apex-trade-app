@@ -107,12 +107,6 @@ export default function Settings() {
                         subtitle="Manage your personal information"
                         onPress={() => router.push("/(app)/settings/profile")}
                     />
-                    <SettingRow
-                        icon="lock-closed-outline"
-                        title="Security"
-                        subtitle="Password and account security"
-                        isLast
-                    />
                 </View>
 
                 {/* Trading */}
@@ -127,12 +121,6 @@ export default function Settings() {
                         subtitle="Manage your rules and setups"
                         onPress={() => router.push("/(app)/playbook")}
                     />
-                    <SettingRow
-                        icon="options-outline"
-                        title="Preferences"
-                        subtitle="Default market and journal settings"
-                        isLast
-                    />
                 </View>
 
                 {/* App */}
@@ -141,11 +129,6 @@ export default function Settings() {
                 </Text>
 
                 <View className="rounded-2xl border border-border bg-surface px-4">
-                    <SettingRow
-                        icon="notifications-outline"
-                        title="Notifications"
-                        subtitle="Manage reminders and alerts"
-                    />
                     <SettingRow
                         icon="information-circle-outline"
                         title="About Apex Trade"

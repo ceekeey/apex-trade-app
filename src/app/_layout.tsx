@@ -1,3 +1,4 @@
+import { NetworkOverlay } from "@/components/NetworkOverlay";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -54,6 +55,7 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <StatusBar style="light" />
         <RootLayoutNav />
+        <NetworkOverlay />
       </SafeAreaProvider>
       <Toast />
     </AuthProvider>

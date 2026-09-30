@@ -49,7 +49,8 @@
           "cameraPermission": "Allow apextrade to access your camera to take chart screenshots.",
           "photosPermission": "Allow apextrade to access your photos to upload chart screenshots."
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,

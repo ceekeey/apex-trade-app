@@ -1,7 +1,7 @@
 import { useAuth } from "@/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import {
     heightPercentageToDP as hp,
@@ -53,70 +53,84 @@ export default function Trades() {
     const [rawJournals, setRawJournals] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
-    // Fetch Journal Entries from Backend API
-    useEffect(() => {
-        const fetchJournals = async () => {
-            try {
-                setIsLoading(true);
-                const response = await fetch(`${SERVER_URI}/jornal/all`, {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                });
-                const result = await response.json();
+    // Fetch Journal Entries from Backend API whenever screen comes into focus
+    useFocusEffect(
+        useCallback(() => {
+            let isMounted = true;
 
-                if (result.success && Array.isArray(result.data)) {
-                    setRawJournals(result.data);
-                    const entriesMap: Record<string, JournalDay> = {};
+            const fetchJournals = async () => {
+                if (!token) return;
 
-                    result.data.forEach((item: any) => {
-                        const itemDate = new Date(item.date);
-                        const key = formatDateKey(itemDate);
-
-                        let status: DayStatus = "MIXED";
-                        if (item.pnl > 0) status = "WIN";
-                        else if (item.pnl < 0) status = "LOSS";
-
-                        if (entriesMap[key]) {
-                            entriesMap[key].pnl = (entriesMap[key].pnl || 0) + item.pnl;
-                            entriesMap[key].trades = (entriesMap[key].trades || 0) + 1;
-                            // Re-evaluate day status if mixed trades occurred on the same day
-                            if (entriesMap[key].pnl! > 0) entriesMap[key].status = "WIN";
-                            else if (entriesMap[key].pnl! < 0) entriesMap[key].status = "LOSS";
-                            else entriesMap[key].status = "MIXED";
-                        } else {
-                            entriesMap[key] = {
-                                date: itemDate.getDate(),
-                                status,
-                                pnl: item.pnl,
-                                trades: 1,
-                            };
-                        }
+                try {
+                    setIsLoading(true);
+                    const response = await fetch(`${SERVER_URI}/jornal/all`, {
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                        },
                     });
+                    const result = await response.json();
 
-                    setJournalData(entriesMap);
-                } else {
-                    Toast.show({
-                        type: "error",
-                        text1: "Failed to load journals",
-                        text2: result.message || "Could not retrieve data.",
-                    });
+                    if (!isMounted) return;
+
+                    if (result.success && Array.isArray(result.data)) {
+                        setRawJournals(result.data);
+                        const entriesMap: Record<string, JournalDay> = {};
+
+                        result.data.forEach((item: any) => {
+                            const itemDate = new Date(item.date);
+                            const key = formatDateKey(itemDate);
+
+                            let status: DayStatus = "MIXED";
+                            if (item.pnl > 0) status = "WIN";
+                            else if (item.pnl < 0) status = "LOSS";
+
+                            if (entriesMap[key]) {
+                                entriesMap[key].pnl = (entriesMap[key].pnl || 0) + item.pnl;
+                                entriesMap[key].trades = (entriesMap[key].trades || 0) + 1;
+                                // Re-evaluate day status if mixed trades occurred on the same day
+                                if (entriesMap[key].pnl! > 0) entriesMap[key].status = "WIN";
+                                else if (entriesMap[key].pnl! < 0) entriesMap[key].status = "LOSS";
+                                else entriesMap[key].status = "MIXED";
+                            } else {
+                                entriesMap[key] = {
+                                    date: itemDate.getDate(),
+                                    status,
+                                    pnl: item.pnl,
+                                    trades: 1,
+                                };
+                            }
+                        });
+
+                        setJournalData(entriesMap);
+                    } else {
+                        Toast.show({
+                            type: "error",
+                            text1: "Failed to load journals",
+                            text2: result.message || "Could not retrieve data.",
+                        });
+                    }
+                } catch (error) {
+                    if (isMounted) {
+                        Toast.show({
+                            type: "error",
+                            text1: "Network Error",
+                            text2: "Unable to connect to server.",
+                        });
+                    }
+                } finally {
+                    if (isMounted) {
+                        setIsLoading(false);
+                    }
                 }
-            } catch (error) {
-                Toast.show({
-                    type: "error",
-                    text1: "Network Error",
-                    text2: "Unable to connect to server.",
-                });
-            } finally {
-                setIsLoading(false);
-            }
-        };
+            };
 
-        if (token) {
             fetchJournals();
-        }
-    }, [token]);
+
+            return () => {
+                isMounted = false;
+            };
+        }, [token])
+    );
 
     // Compute stats specifically for the selected month/year
     const currentMonthStats = useMemo(() => {

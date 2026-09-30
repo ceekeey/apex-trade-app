@@ -2,7 +2,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import Toast from "react-native-toast-message";
 
 const SERVER_URI = "https://jornal.rgmrabagardama.com.ng/api";
@@ -14,35 +14,29 @@ export default function TradeDetails() {
 
     const [trade, setTrade] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     useEffect(() => {
         const fetchTradeDetails = async () => {
             if (!token || !id) return;
             try {
                 setIsLoading(true);
-                const response = await fetch(`${SERVER_URI}/jornal/all`, {
+                // Fixed: Added the correct '/jornal/jornal/' route path from API docs
+                const response = await fetch(`${SERVER_URI}/jornal/jornal/${id}`, {
                     headers: {
                         Authorization: `Bearer ${token}`,
+                        Accept: "application/json",
                     },
                 });
                 const result = await response.json();
 
-                if (result.success && Array.isArray(result.data)) {
-                    const foundTrade = result.data.find((item: any) => item._id === id);
-                    if (foundTrade) {
-                        setTrade(foundTrade);
-                    } else {
-                        Toast.show({
-                            type: "error",
-                            text1: "Trade Not Found",
-                            text2: "Could not find details for this trade.",
-                        });
-                    }
+                if (response.ok && result.success && result.data) {
+                    setTrade(result.data);
                 } else {
                     Toast.show({
                         type: "error",
-                        text1: "Failed to load details",
-                        text2: result.message || "Could not retrieve data.",
+                        text1: "Trade Not Found",
+                        text2: result.message || "Could not find details for this trade.",
                     });
                 }
             } catch (error) {
@@ -58,6 +52,57 @@ export default function TradeDetails() {
 
         fetchTradeDetails();
     }, [token, id]);
+
+    const handleDeleteTrade = () => {
+        Alert.alert(
+            "Delete Journal Entry",
+            "Are you sure you want to delete this trade? This action cannot be undone.",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            setIsDeleting(true);
+                            // Fixed: Using the correct delete route path from API docs
+                            const response = await fetch(`${SERVER_URI}/jornal/delete/${id}`, {
+                                method: "DELETE",
+                                headers: {
+                                    Authorization: `Bearer ${token}`,
+                                    Accept: "application/json",
+                                },
+                            });
+                            const result = await response.json();
+
+                            if (response.ok && result.success) {
+                                Toast.show({
+                                    type: "success",
+                                    text1: "Deleted",
+                                    text2: "Journal entry deleted successfully.",
+                                });
+                                router.replace("/(app)/(tabs)/trades");
+                            } else {
+                                Toast.show({
+                                    type: "error",
+                                    text1: "Delete Failed",
+                                    text2: result.message || "Could not delete entry.",
+                                });
+                            }
+                        } catch (error) {
+                            Toast.show({
+                                type: "error",
+                                text1: "Network Error",
+                                text2: "Failed to connect to server.",
+                            });
+                        } finally {
+                            setIsDeleting(false);
+                        }
+                    },
+                },
+            ]
+        );
+    };
 
     if (isLoading) {
         return (
@@ -101,22 +146,20 @@ export default function TradeDetails() {
 
     const formattedDate = trade.date ? trade.date.split("T")[0] : "N/A";
 
-    // Helper function to extract base64 data URI string safely
     const getImageSource = (imageObj: any) => {
-        if (!imageObj) return null;
-        if (imageObj.data && imageObj.mimeType) {
-            // Checks if data already contains the base64 prefix
-            if (imageObj.data.startsWith("data:")) {
-                return imageObj.data;
-            }
-            return `data:${imageObj.mimeType};base64,${imageObj.data}`;
-        }
-        return null;
+        const target = imageObj || {};
+        const data = target.data;
+        const mimeType = target.mimeType;
+
+        if (!data) return null;
+        if (data.startsWith("data:")) return data;
+        if (mimeType) return `data:${mimeType};base64,${data}`;
+        return `data:image/png;base64,${data}`;
     };
 
-    const htfSource = getImageSource(trade.highTimeFramelmage);
-    const mtfSource = getImageSource(trade.mediumTimeFramelmage);
-    const ltfSource = getImageSource(trade.lowTimeFramelmage);
+    const htfSource = getImageSource(trade.highTimeFrameImage || trade.highTimeFramelmage);
+    const mtfSource = getImageSource(trade.mediumTimeFrameImage || trade.mediumTimeFramelmage);
+    const ltfSource = getImageSource(trade.lowTimeFrameImage || trade.lowTimeFramelmage);
 
     return (
         <View className="flex-1 bg-background">
@@ -126,18 +169,24 @@ export default function TradeDetails() {
                     onPress={() => router.back()}
                     className="h-10 w-10 items-center justify-center rounded-full bg-surface-alt"
                 >
-                    <Ionicons
-                        name="arrow-back"
-                        size={21}
-                        color="#0F172A"
-                    />
+                    <Ionicons name="arrow-back" size={21} color="#0F172A" />
                 </TouchableOpacity>
 
                 <Text className="text-lg font-bold text-text-primary">
                     Trade Details
                 </Text>
 
-                <View className="h-10 w-10" />
+                <TouchableOpacity
+                    onPress={handleDeleteTrade}
+                    disabled={isDeleting}
+                    className="h-10 w-10 items-center justify-center rounded-full bg-danger/10"
+                >
+                    {isDeleting ? (
+                        <ActivityIndicator size="small" color="#DC2626" />
+                    ) : (
+                        <Ionicons name="trash-outline" size={20} color="#DC2626" />
+                    )}
+                </TouchableOpacity>
             </View>
 
             <ScrollView
@@ -151,18 +200,13 @@ export default function TradeDetails() {
                             <Text className="text-2xl font-bold text-text-primary">
                                 {trade.asset || "Trade"}
                             </Text>
-
                             <Text className="mt-1 text-sm text-text-muted">
                                 {formattedDate}
                             </Text>
                         </View>
 
-                        <View
-                            className={`rounded-full px-4 py-2 ${resultBg}`}
-                        >
-                            <Text
-                                className={`text-sm font-bold ${resultColor}`}
-                            >
+                        <View className={`rounded-full px-4 py-2 ${resultBg}`}>
+                            <Text className={`text-sm font-bold ${resultColor}`}>
                                 {resultText}
                             </Text>
                         </View>
@@ -178,10 +222,7 @@ export default function TradeDetails() {
                     <View className="rounded-2xl border border-border bg-surface p-4">
                         <View className="flex-row">
                             <View className="flex-1 border-r border-border">
-                                <Text className="text-sm text-text-muted">
-                                    P&L
-                                </Text>
-
+                                <Text className="text-sm text-text-muted">P&L</Text>
                                 <Text
                                     className={`mt-1 text-2xl font-bold ${isWin
                                         ? "text-success"
@@ -196,10 +237,7 @@ export default function TradeDetails() {
                             </View>
 
                             <View className="flex-1 pl-5">
-                                <Text className="text-sm text-text-muted">
-                                    Setup
-                                </Text>
-
+                                <Text className="text-sm text-text-muted">Setup</Text>
                                 <Text
                                     className="mt-1 text-lg font-bold text-text-primary"
                                     numberOfLines={1}
@@ -219,43 +257,33 @@ export default function TradeDetails() {
 
                     <View className="rounded-2xl border border-border bg-surface">
                         <View className="flex-row items-center justify-between border-b border-border px-4 py-4">
-                            <Text className="text-sm text-text-muted">
-                                Asset / Symbol
-                            </Text>
-
-                            <Text className="font-semibold text-text-primary">
-                                {trade.asset || "N/A"}
-                            </Text>
+                            <Text className="text-sm text-text-muted">Asset / Symbol</Text>
+                            <Text className="font-semibold text-text-primary">{trade.asset || "N/A"}</Text>
                         </View>
 
                         <View className="flex-row items-center justify-between border-b border-border px-4 py-4">
-                            <Text className="text-sm text-text-muted">
-                                Resulting PnL
-                            </Text>
-
-                            <Text className={`font-semibold ${resultColor}`}>
-                                ${pnlValue.toFixed(2)}
-                            </Text>
+                            <Text className="text-sm text-text-muted">Type</Text>
+                            <Text className="font-semibold text-text-primary">{trade.type || "N/A"}</Text>
                         </View>
 
                         <View className="flex-row items-center justify-between border-b border-border px-4 py-4">
-                            <Text className="text-sm text-text-muted">
-                                Setup Type
-                            </Text>
+                            <Text className="text-sm text-text-muted">Entry Price</Text>
+                            <Text className="font-semibold text-text-primary">{trade.entryPrice || "N/A"}</Text>
+                        </View>
 
-                            <Text className="font-semibold text-text-primary">
-                                {trade.setup || "N/A"}
-                            </Text>
+                        <View className="flex-row items-center justify-between border-b border-border px-4 py-4">
+                            <Text className="text-sm text-text-muted">Exit Price</Text>
+                            <Text className="font-semibold text-text-primary">{trade.exitPrice || "N/A"}</Text>
+                        </View>
+
+                        <View className="flex-row items-center justify-between border-b border-border px-4 py-4">
+                            <Text className="text-sm text-text-muted">Lot Size</Text>
+                            <Text className="font-semibold text-text-primary">{trade.lotSize || "N/A"}</Text>
                         </View>
 
                         <View className="flex-row items-center justify-between px-4 py-4">
-                            <Text className="text-sm text-text-muted">
-                                Date Recorded
-                            </Text>
-
-                            <Text className="font-semibold text-text-primary">
-                                {formattedDate}
-                            </Text>
+                            <Text className="text-sm text-text-muted">Date Recorded</Text>
+                            <Text className="font-semibold text-text-primary">{formattedDate}</Text>
                         </View>
                     </View>
                 </View>
@@ -270,10 +298,10 @@ export default function TradeDetails() {
                         {htfSource && (
                             <View className="mb-4">
                                 <Text className="mb-2 text-xs font-semibold text-text-muted">High Timeframe (HTF)</Text>
-                                <View className="overflow-hidden rounded-2xl border border-border bg-surface">
+                                <View className="overflow-hidden rounded-2xl border border-border bg-surface p-2">
                                     <Image
                                         source={{ uri: htfSource }}
-                                        style={{ width: "100%", height: 220 }}
+                                        style={{ width: "100%", height: 240 }}
                                         resizeMode="contain"
                                     />
                                 </View>
@@ -283,10 +311,10 @@ export default function TradeDetails() {
                         {mtfSource && (
                             <View className="mb-4">
                                 <Text className="mb-2 text-xs font-semibold text-text-muted">Medium Timeframe (MTF)</Text>
-                                <View className="overflow-hidden rounded-2xl border border-border bg-surface">
+                                <View className="overflow-hidden rounded-2xl border border-border bg-surface p-2">
                                     <Image
                                         source={{ uri: mtfSource }}
-                                        style={{ width: "100%", height: 220 }}
+                                        style={{ width: "100%", height: 240 }}
                                         resizeMode="contain"
                                     />
                                 </View>
@@ -296,10 +324,10 @@ export default function TradeDetails() {
                         {ltfSource && (
                             <View className="mb-4">
                                 <Text className="mb-2 text-xs font-semibold text-text-muted">Low Timeframe (LTF)</Text>
-                                <View className="overflow-hidden rounded-2xl border border-border bg-surface">
+                                <View className="overflow-hidden rounded-2xl border border-border bg-surface p-2">
                                     <Image
                                         source={{ uri: ltfSource }}
-                                        style={{ width: "100%", height: 220 }}
+                                        style={{ width: "100%", height: 240 }}
                                         resizeMode="contain"
                                     />
                                 </View>
